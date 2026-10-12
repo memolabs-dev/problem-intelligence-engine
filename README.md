@@ -238,3 +238,22 @@ PIE_THREADS_REFRESH=1 PIE_THREAD_IDS='hackernews:49972125' npm run threads:inges
 GitHub loads a fixed 100-comment page and stores the offset into that page, while HN retains the bounded queue and parent IDs. `PIE_HN_MAX_DEPTH` (1–10, default 4) limits traversal. The data remains from public sources; a change in the comment count is **not evidence of independent demand**.
 
 The maximum budget is an intentional safety limit. Very large HN discussions are rejected if their checkpoint would exceed 20,000 queued/seen IDs rather than silently dropping replies. Re-run or refresh explicitly when seeking newer replies to a previously completed conversation.
+
+## Blind corroboration holdout (work in progress)
+
+The eight synthetic pairs in `eval/corroboration-pairs.json` are **development data**, not independent validation. To prepare a reproducible, unlabeled annotation queue from source-current, quoted problems:
+
+```bash
+PIE_HOLDOUT_TARGET=150 PIE_HOLDOUT_OUTPUT=/tmp/pie-holdout npm run eval:prepare-holdout
+```
+
+The four output files are private local artifacts (mode `0600`), not committed: `-blind.json` for annotators, `-audit.json` for sampling provenance and embedding similarity, and `-reviewer-a.json` / `-reviewer-b.json` with **empty labels**. Annotators see public source titles, raw excerpts and URLs, **not** the model's predictions, similarity scores, account identifiers or other reviewers' judgments.
+
+Each reviewer supplies `same_problem`, `different_problem` or `uncertain` with a short rationale for every pair. A separate validator compares both submissions, reports disagreements and unanswered items, and calculates precision/recall only on agreed, non-uncertain pairs:
+
+```bash
+npm run eval:review-holdout -- /tmp/pie-holdout-blind.json \
+  /tmp/pie-holdout-reviewer-a.json /tmp/pie-holdout-reviewer-b.json
+```
+
+Reviewer identities are pseudonyms supplied by the user and are **not authenticated**. No performance claim is independently verified until humans are verified externally and disagreements are adjudicated. Developer-labeled observations from `eval/labels.json` are excluded by default. If fewer than 150 pairs remain, the shortfall is reported instead of silently lowering the target. More source-backed observations are needed to finish the P0 benchmark.
