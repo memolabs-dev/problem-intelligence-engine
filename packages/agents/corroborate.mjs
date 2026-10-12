@@ -30,11 +30,18 @@ SELECT a.run_id AS left_run,a.observation_id AS left_id,a.statement AS left_stat
  1-(a.embedding <=> b.embedding) AS similarity
 FROM current a JOIN current b ON a.observation_id < b.observation_id
 WHERE 1-(a.embedding <=> b.embedding)>=$2
-ORDER BY similarity DESC,a.observation_id,b.observation_id
+  AND COALESCE(a.thread_root_id,a.observation_id)<>COALESCE(b.thread_root_id,b.observation_id)
+ORDER BY CASE WHEN EXISTS (
+  SELECT 1 FROM corroboration_edges prior
+  WHERE prior.left_run=a.run_id AND prior.left_observation=a.observation_id
+    AND prior.right_run=b.run_id AND prior.right_observation=b.observation_id
+    AND prior.model=$4 AND prior.verdict IN ('same_problem','different_problem','uncertain')
+) THEN 1 ELSE 0 END,
+ similarity DESC,a.observation_id,b.observation_id
 LIMIT $3`;
 export const TARGETED_NEAREST_PAIRS_SQL=NEAREST_PAIRS_SQL.replace(
  'WHERE 1-(a.embedding <=> b.embedding)>=$2',
- 'WHERE 1-(a.embedding <=> b.embedding)>=$2 AND (a.observation_id=ANY($4::text[]) OR b.observation_id=ANY($4::text[]))'
+ 'WHERE 1-(a.embedding <=> b.embedding)>=$2 AND (a.observation_id=ANY($5::text[]) OR b.observation_id=ANY($5::text[]))'
 );
 
 export function validatePairVerdict(payload){
@@ -130,13 +137,13 @@ export async function runCorroboration(pool,{threshold=0.4,maxPairs=12,observati
  if(observationIds!==null&&(!Array.isArray(observationIds)||observationIds.length>100||observationIds.some(id=>typeof id!=='string'||!id)))throw new Error('Invalid targeted observation IDs');
  if(!Number.isFinite(threshold)||threshold<0||threshold>1||!Number.isInteger(maxPairs)||maxPairs<1||maxPairs>100)throw RangeError('Invalid corroboration search controls');
  const targeted=observationIds!==null;
+ const modelKey=EMBEDDING_MODEL+'+'+reviewerModel+'+'+SEMANTIC_REVIEW_POLICY_VERSION;
  const {rows}=await pool.query(targeted?TARGETED_NEAREST_PAIRS_SQL:NEAREST_PAIRS_SQL,
-  targeted?[EMBEDDING_MODEL,threshold,maxPairs,[...new Set(observationIds)]]:[EMBEDDING_MODEL,threshold,maxPairs]);
+  targeted?[EMBEDDING_MODEL,threshold,maxPairs,modelKey,[...new Set(observationIds)]]:[EMBEDDING_MODEL,threshold,maxPairs,modelKey]);
  const {rows:allNodes}=await pool.query(CURRENT_EMBEDDED_NODES_SQL,[EMBEDDING_MODEL]);
  const results=[];
  let cachedPairs=0;
  for(const pair of rows){
-  const modelKey=EMBEDDING_MODEL+'+'+reviewerModel+'+'+SEMANTIC_REVIEW_POLICY_VERSION;
   const previous=await pool.query('SELECT verdict,rationale FROM corroboration_edges WHERE left_run=$1 AND left_observation=$2 AND right_run=$3 AND right_observation=$4 AND model=$5 AND verdict<>$6 LIMIT 1',[pair.left_run,pair.left_id,pair.right_run,pair.right_id,modelKey,'error']);
   let verdict=previous.rows?.[0];
   if(verdict){cachedPairs++;}

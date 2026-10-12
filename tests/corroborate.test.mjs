@@ -107,6 +107,14 @@ test('scoped semantic comparison only examines pairs involving newly verified ob
  const result=await runCorroboration(pool,{observationIds:['b'],threshold:0.5,maxPairs:3,reviewerModel:'test',judge:async()=>({verdict:'different_problem',rationale:'Different cause'})});
  assert.equal(result.pairsEvaluated,1);
  assert.equal(calls[0].sql,TARGETED_NEAREST_PAIRS_SQL);
- assert.deepEqual(calls[0].params[3],['b']);
- assert.match(TARGETED_NEAREST_PAIRS_SQL,/a\.observation_id=ANY\(\$4::text\[\]\)/);
+ assert.deepEqual(calls[0].params[4],['b']);
+ assert.match(calls[0].params[3],/same-problem-v2$/);
+ assert.match(TARGETED_NEAREST_PAIRS_SQL,/a\.observation_id=ANY\(\$5::text\[\]\)/);
+});
+
+test('semantic retrieval never wastes comparison budget on same original thread and prioritizes unreviewed pairs',()=>{
+ assert.match(NEAREST_PAIRS_SQL,/COALESCE\(a\.thread_root_id,a\.observation_id\)<>COALESCE\(b\.thread_root_id,b\.observation_id\)/);
+ assert.match(NEAREST_PAIRS_SQL,/prior\.model=\$4/);
+ assert.match(NEAREST_PAIRS_SQL,/CASE WHEN EXISTS/);
+ assert.match(NEAREST_PAIRS_SQL,/THEN 1 ELSE 0 END/);
 });
