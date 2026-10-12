@@ -351,3 +351,7 @@ Comment results are unverified until the same source-quote and semantic-review p
 ### Original discussion lineage in blind-holdout preflight
 
 The sampling audit (not the annotator-facing blind queue) now includes the **original conversation root** for each candidate source. Two Hacker News comments that belong to the same story are never an eligible independent-discussion pair, even if the comment IDs and accounts differ. Quality reports distinguish the number of raw observations from the number of distinct original source threads by platform. This protects against apparent cross-community diversity produced by many comments within the same story; it does not prove that different threads were authored by distinct humans.
+
+### Prioritize distinct source discussions within the LLM budget
+
+Targeted discovery now attaches each candidate's **original discussion root** to the search report and prioritizes candidates from different discussions. It continues to alternate reporting surfaces (GitHub issue, Hacker News story/comment); only when there are fewer distinct roots than available analysis slots may a second comment from the same thread be chosen. The report exposes `distinctOriginalThreadsSelected` alongside `observationIdsAnalyzed` for auditing. This reduces redundant model calls but does **not** establish independent human identities, semantic corroboration or commercial demand.

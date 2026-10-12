@@ -47,8 +47,9 @@ export async function findPendingObservations(pool,ids){
  * GitHub search results consume the entire LLM budget before any HN comment
  * is considered. This does NOT promote comments to independent discussions.
  */
-export function selectDiverseDiscoveryCandidates(ids,types={},limit=6){
- if(!Array.isArray(ids)||!Number.isInteger(limit)||limit<1||limit>20)throw Error('Invalid candidate selection');
+export function selectDiverseDiscoveryCandidates(ids,types={},limit=6,threadRoots={}){
+ if(!Array.isArray(ids)||!Number.isInteger(limit)||limit<1||limit>20||
+  !threadRoots||typeof threadRoots!=='object'||Array.isArray(threadRoots))throw Error('Invalid candidate selection');
  const order=['hackernews_comment','github_issue','hackernews_story','other'];
  const groups=new Map(order.map(t=>[t,[]])),seen=new Set();
  for(const id of ids){
@@ -58,15 +59,24 @@ export function selectDiverseDiscoveryCandidates(ids,types={},limit=6){
   const group=groups.has(types[id])?types[id]:inferred;
   groups.get(group).push(id);
  }
- const chosen=[];
- while(chosen.length<limit){
-  let changed=false;
-  for(const type of order){
-   if(chosen.length>=limit)break;
-   const next=groups.get(type).shift();
-   if(next){chosen.push(next);changed=true;}
+ const chosen=[],roots=new Set();
+ // Prefer unique originating discussions across all surfaces first. Only use
+ // another comment from an already selected thread when capacity remains.
+ for(const allowRepeatedRoots of [false,true]){
+  while(chosen.length<limit){
+   let progressed=false;
+   for(const type of order){
+    if(chosen.length>=limit)break;
+    const group=groups.get(type);
+    const idx=group.findIndex(id=>allowRepeatedRoots||!roots.has(threadRoots[id]||id));
+    if(idx<0)continue;
+    const [id]=group.splice(idx,1);
+    chosen.push(id);
+    roots.add(threadRoots[id]||id);
+    progressed=true;
+   }
+   if(!progressed)break;
   }
-  if(!changed)break;
  }
  return chosen;
 }
@@ -97,7 +107,7 @@ export async function runDiscoveryCycle(pool,query,{
 
  const search=await discovery(pool,query,{perSource,includeHNComments});
  const selection=await pendingLookup(pool,search.observationIds);
- const selected=selectDiverseDiscoveryCandidates(selection.pending,search.observationTypes||{},maxAnalyze);
+ const selected=selectDiverseDiscoveryCandidates(selection.pending,search.observationTypes||{},maxAnalyze,search.observationThreadRoots||{});
  const summary={
   query,model,sourceSearch:search,
   pendingBeforeLimit:selection.pending.length,
@@ -105,6 +115,7 @@ export async function runDiscoveryCycle(pool,query,{
   missingSources:selection.missing,
   deferredByBudget:selection.pending.length-selected.length,
   observationIdsAnalyzed:selected,
+  distinctOriginalThreadsSelected:new Set(selected.map(id=>search.observationThreadRoots?.[id]||id)).size,
   extraction:{total:0,found:0,rejected:0,none:0,error:0,recovered:0},
   history:null,embeddings:null,
   corroboration:null,commercialValidation:'unknown',

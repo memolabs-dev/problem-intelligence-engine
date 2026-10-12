@@ -49,6 +49,7 @@ test('mixed HN discovery counts two comment authors but one independent discussi
  assert.equal(report.distinctSourceAccounts,2);
  assert.equal(report.distinctSourceThreads,1);
  assert.equal(report.hackerNewsCommentObservations,2);
+ assert.deepEqual(report.observationThreadRoots,{'hackernews:101':'hackernews:777','hackernews:102':'hackernews:777'});
  assert.equal(saved[0].threadRootId,'hackernews:777');
  assert.ok(report.sources.some(item=>item.source==='hackernews_comments'&&item.status==='ok'));
 });

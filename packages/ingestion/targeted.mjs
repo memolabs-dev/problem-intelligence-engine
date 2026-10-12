@@ -112,6 +112,7 @@ export async function runTargetedDiscovery(pool,query,{fetcher=fetch,perSource=1
   distinctSourceThreads:new Set(unique.map(o=>o.threadRootId??o.id)).size,
   hackerNewsCommentObservations:unique.filter(o=>o.source==='hackernews'&&o.threadRootId!==o.id).length,
   observationTypes:Object.fromEntries(unique.map(o=>[o.id,o.source==='github'?'github_issue':o.threadRootId!==o.id?'hackernews_comment':'hackernews_story'])),
+  observationThreadRoots:Object.fromEntries(unique.map(o=>[o.id,o.threadRootId||o.id])),
   repeatedPostsFromKnownAccounts:accounts.length-new Set(accounts).size,
   verifiedIndependentHumans:null,
   incomplete:statuses.some(x=>x.status!=='ok'),qualification:'unreviewed_source_observations',

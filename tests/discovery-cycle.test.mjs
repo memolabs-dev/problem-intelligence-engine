@@ -59,6 +59,22 @@ test('complete discovery cycle calls each stage with bounded explicit IDs, prese
  assert.equal(report.isIndependentDemandEstablished,false);
  assert.equal(report.corroboration.groups[0].distinctAccountCount,1);
 });
+test('cycle report counts distinct original discussions selected for review',async()=>{
+ const result=await runDiscoveryCycle({},'Web workers never exit',{
+  env:environment,maxAnalyze:3,
+  discovery:async()=>({observationIds:['hackernews:101','hackernews:102','github:7'],
+   observationTypes:{'hackernews:101':'hackernews_comment','hackernews:102':'hackernews_comment','github:7':'github_issue'},
+   observationThreadRoots:{'hackernews:101':'hackernews:100','hackernews:102':'hackernews:100','github:7':'github:7'},
+   incomplete:false}),
+  pendingLookup:async()=>({pending:['hackernews:101','hackernews:102','github:7'],previouslyReviewed:[],missing:[]}),
+  analyze:async(_pool,opts)=>({raw:{recovered:0},verified:{total:opts.observationIds.length,found:0,
+   rejected:0,none:opts.observationIds.length,error:0,results:opts.observationIds.map(id=>({observationId:id,status:'none'}))}}),
+  persist:async()=>({runId:'fake'})
+ });
+ assert.deepEqual(result.observationIdsAnalyzed,['hackernews:101','github:7','hackernews:102']);
+ assert.equal(result.distinctOriginalThreadsSelected,2);
+ assert.equal(result.isIndependentDemandEstablished,false);
+});
 test('rerunning when all source revisions are already reviewed performs no extra inference',async()=>{
  let calls=0;
  const result=await runDiscoveryCycle({},'CSV streaming import fails',{
@@ -89,4 +105,13 @@ test('source-diverse selection includes HN comments before exhausting model budg
  assert.deepEqual(chosen,['hackernews:4','github:1','hackernews:3']);
  assert.equal(new Set(chosen).size,3);
  assert.deepEqual(selectDiverseDiscoveryCandidates(ids,types,2),['hackernews:4','github:1']);
+});
+
+test('discovery selects different original threads before repeated comments, preserving surface mix',async()=>{
+ const ids=['hackernews:101','hackernews:102','hackernews:201','github:3','hackernews:301'];
+ const types=Object.fromEntries(ids.map(id=>[id,id.startsWith('github:')?'github_issue':'hackernews_comment']));
+ const roots={'hackernews:101':'hackernews:100','hackernews:102':'hackernews:100','hackernews:201':'hackernews:200','hackernews:301':'hackernews:300'};
+ const {selectDiverseDiscoveryCandidates}=await import('../packages/agents/discovery-cycle.mjs');
+ assert.deepEqual(selectDiverseDiscoveryCandidates(ids,types,4,roots),['hackernews:101','github:3','hackernews:201','hackernews:301']);
+ assert.deepEqual(selectDiverseDiscoveryCandidates(ids,types,5,roots),['hackernews:101','github:3','hackernews:201','hackernews:301','hackernews:102']);
 });
