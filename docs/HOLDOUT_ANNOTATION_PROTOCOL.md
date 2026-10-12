@@ -50,3 +50,21 @@ Public HN comments retain `thread_root_id` pointing to the parent story. A pair 
 The automated evidence collection, provenance, alternative retrieval, source-current model corroboration, quality preflight and offline reviewer UI can be considered implementation-complete once CI is green. The separate P0 **independent-validation acceptance criterion** cannot pass without two real human reviewers and an adjudicated, frozen, appropriately challenging blind holdout.
 
 An annotator uses `npm run eval:annotation-ui -- /absolute/private/holdout-blind.json /absolute/private/reviewer-a.html` and repeats for a separate reviewer. Both must export their own private results. Validate with `npm run eval:review-holdout -- <blind> <reviewer-a> <reviewer-b> [predictions]`, keeping source snapshots and review provenance. Do not use the model's own predictions to fill human annotation templates, and do not close issue #3 until the independent evaluation is actually completed.
+
+## Human disagreement adjudication
+
+After two independently completed reviewer submissions, prepare a private human adjudication queue:
+
+```bash
+npm run eval:adjudicate-holdout -- prepare /private/blind.json /private/reviewer-a.json /private/reviewer-b.json /private/disagreements.json
+```
+
+The queue contains **only disagreements and unanswered labels** and has null verdicts. It is bound to SHA-256 fingerprints of the exact frozen blind queue and both original reviewer submissions. A separate human adjudicator examines the original linked sources, then fills `label` and `reason` for every disputed entry. Never synthesize these answers with an LLM. Reviewers must not see each other's labels before independently completing their own review.
+
+To calculate a final descriptive confusion matrix and unresolved coverage after genuine human adjudication:
+
+```bash
+npm run eval:adjudicate-holdout -- finalize /private/blind.json /private/reviewer-a.json /private/reviewer-b.json /private/disagreements.json /private/predictions.json
+```
+
+This helper never authenticates reviewers or adjudicators and always reports `independentBenchmarkVerified:false`. Freezing the corpus, screening for source leakage, documenting adjudicator independence, and providing positive-example coverage must be externally audited before any publication claim.
