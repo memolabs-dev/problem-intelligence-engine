@@ -104,3 +104,26 @@ test('query generation preserves platform from source statement even if missing 
  assert.match(queries[0],/unreffed/);
  assert.notEqual(queries[0],queries[1]);
 });
+
+test('GitHub recurrence probes are compact rather than requiring every word to match',()=>{
+ const examples=[
+  {id:'github:bun',title:'Bun HTTP client hangs until abort despite ACKed inbound TLS data',statement:'Bun HTTP client keep-alive stalls after acknowledged data'},
+  {id:'github:deno',title:'Web workers cannot be unreffed',statement:'Web workers in Deno cannot be unreffed and block the event loop'},
+  {id:'github:next',title:'Turbopack ignores webpackChunkName in dynamic imports',statement:'The bundler drops webpackChunkName comments'}
+ ];
+ for(const item of examples){
+  const queries=buildRecurrenceQueries(item,{maxQueries:3});
+  assert.ok(queries.length>=2);
+  assert.ok(queries.every(q=>q.trim().split(/\\s+/).length<=4),JSON.stringify(queries));
+  assert.ok(queries.every(q=>q.length>=8&&q.length<=130));
+ }
+});
+
+test('ordinary word next is not mistaken for the Next.js platform',()=>{
+ const row={id:'github:routing',title:'Prefetch loop: optimistic routing drops a parallel slot next to a static segment',
+ statement:'A route parameter disappears in a parallel slot next to a static segment'};
+ const queries=buildRecurrenceQueries(row,{maxQueries:2});
+ assert.ok(queries.every(query=>query.split(/\\s+/).length<=4));
+ assert.ok(queries.every(query=>!query.includes('loop:')));
+ assert.ok(queries.some(query=>/prefetch|routing/i.test(query)));
+});
