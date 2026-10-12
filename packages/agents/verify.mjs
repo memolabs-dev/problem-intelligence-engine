@@ -2,6 +2,7 @@ import {waitForFreeModelSlot} from './rate-limit.mjs';
 import {readFile,writeFile} from 'node:fs/promises';
 import {createPool} from '../storage/postgres.mjs';
 import {resolveLLMConfig} from './llm.mjs';
+import {provenanceRejection} from './source-provenance.mjs';
 
 const ACCEPT=new Set(['observed_failure','repeated_friction','unmet_need']);
 const REJECT=new Set(['generic_question','opinion','spam','hypothetical','unsupported']);
@@ -37,6 +38,8 @@ export async function verifyWithLLM(observation,candidate,options={}){
  if(typeof candidate?.statement!=='string'||typeof candidate?.excerpt!=='string'||!String(observation.title||'').concat('\n',String(observation.body||'')).includes(candidate.excerpt))throw Error('Candidate evidence is not grounded');
  // A clearly marked spam entry cannot become an actionable problem.
  if(/^\s*\[spam\]/i.test(String(observation.title||'')))return {accept:false,category:'spam',method:'deterministic'};
+ const provenance=provenanceRejection(observation);
+ if(provenance)return provenance;
  const nemotron=config.provider==='openrouter'&&/^nvidia\/nemotron-3\.5-lightning(?::free)?$/.test(model);
  const body={
   model,temperature:0,max_tokens:512,
@@ -76,6 +79,8 @@ export async function verifyReport(pool,report,{judge=verifyWithLLM,sleeper=ms=>
   try{
    const observation=byId.get(item.observationId);
    if(!observation)throw Error('Source observation missing');
+   const flagged=provenanceRejection(observation);
+   if(flagged){results.push({observationId:item.observationId,status:'rejected',sourceContentHash:item.sourceContentHash??null,verification:flagged});continue;}
    let verdict;
    for(let attempt=1;attempt<=2;attempt++){
     try{verdict=await judge(observation,item.candidate);break;}

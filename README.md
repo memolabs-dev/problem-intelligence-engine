@@ -263,3 +263,38 @@ Reviewer identities are pseudonyms supplied by the user and are **not authentica
 The default `eval:prepare-holdout` sampler uses a difficulty-first, provenance-diverse selection, explicitly prioritizing ambiguous semantic neighbors over easy unrelated pairs. All buckets are **unlabeled candidates**; a high embedding similarity does **not** establish a true same-problem pair. Source exposure is bounded where possible, and every pair previously sent to the semantic reviewer is excluded at the SQL level to prevent evaluation leakage.
 
 Frozen reviewer files are immutable by default: attempting to reuse an existing output prefix fails instead of overwriting annotations. Set a fresh prefix, such as `PIE_HOLDOUT_OUTPUT=/tmp/pie-holdout-v3`, for a new dataset. Sampling audits now separately report near-miss (≥0.60), ambiguous (0.35–0.60), contextual (0.15–0.35), and easy-negative candidate bands. These are prioritization categories, not model labels or precision estimates.
+
+## P0: source-backed recurrence probes
+
+The recurrence researcher begins with one or more **current, verified problems** and generates bounded, versioned public search probes. Each probe runs the existing pipeline (GitHub/Hacker News search → source revision triage → free Nemotron extraction → independent quote verification → local embeddings → scoped semantic comparison). The original verified problem, query, search audit and result counts are linked in PostgreSQL's `recurrence_probe_runs` table.
+
+First preview the proposed searches **without web or LLM calls**:
+
+```bash
+PIE_RECURRENCE_DRY_RUN=1 PIE_RECURRENCE_SEED_IDS='github:5814924941,github:5779324875' \
+  npm run recurrence:research
+```
+
+Then run a deliberately small public investigation (requires the existing OpenRouter API key):
+
+```bash
+PIE_RECURRENCE_SEED_IDS='github:5814924941,github:5779324875' \
+PIE_RECURRENCE_MAX_SEEDS=2 PIE_RECURRENCE_QUERIES=2 \
+PIE_RECURRENCE_PER_SOURCE=5 PIE_RECURRENCE_MAX_ANALYZE=2 \
+  npm run recurrence:research
+```
+
+Strict limits: at most 6 seed problems, 2 searches per seed, 10 raw results per source, 5 new observations analyzed per query, and 10 semantic comparison candidates per query. A provider outage is recorded as an error/partial probe; unrelated probes can still complete. Queries are lexical retrieval leads, **not paraphrase ground truths or evidence of demand**. Different source accounts are not authenticated independent people, and the model's `same_problem` decisions are not used as blind human evaluation labels. Repeating a probe checks for source updates but reuses prior successful model decisions for unchanged posts.
+
+### Firsthand source provenance and retrospective corrections
+
+A public **digest, issue roundup or news bulletin** may quote a genuine bug filed elsewhere, but its author is not an independent firsthand reporter. The deterministic `source-provenance-v1` screen therefore flags narrowly identifiable roundup titles and prevents their extracted claims from being promoted as direct corroboration. It is conservative, title-based, and **does not establish that unflagged sources are firsthand**.
+
+To review and correct older findings **without overwriting the audit history**:
+
+```bash
+PIE_PROVENANCE_DRY_RUN=1 npm run audit:provenance
+npm run audit:provenance
+```
+
+Corrections are new versioned `model_runs`/`model_decisions` with `provider=internal`, while older findings remain in the history. All downstream current-source queries use the latest accepted/rejected decision; the historical embedding can remain stored without being used as current evidence. To establish a firsthand claim from a secondary digest, follow its referenced original issue and verify that primary source separately. The title heuristic cannot detect every syndication or repost and is not an author identity proof.
