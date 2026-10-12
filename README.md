@@ -1,5 +1,7 @@
 # Problem Intelligence Engine
 
+**A [Memo Labs Dev](https://github.com/memolabs-dev) product** · [Source repository](https://github.com/memolabs-dev/problem-intelligence-engine)
+
 Evidence-first problem discovery. Local research engine; **not production-ready**.
 
 ## Run
@@ -179,3 +181,31 @@ The report distinguishes `uniqueObservations`, `distinctSourceAccounts` and `rep
 **Example caution:** two nearly identical GitHub issues about `webpackChunkName` were filed by the same source account. They are two posts, not two confirmed independent users. A different issue about a bundler is a search hit, not necessarily the same problem.
 
 After targeted discovery, choose the new observation IDs for `PIE_LLM_OBSERVATION_IDS`, run `npm run llm:verified`, import the verified report and run `npm run embeddings:run`. Only then may the corroboration reviewer assess whether different threads refer to an equivalent problem.
+
+## Memo Labs Dev development workflow
+
+The canonical home of this product is **[memolabs-dev/problem-intelligence-engine](https://github.com/memolabs-dev/problem-intelligence-engine)**.
+
+The organization contributor account is [`drop-agent-bot`](https://github.com/drop-agent-bot), with repository-level **write** permissions (not admin). The account is shared with Drop and CUESHEET; its name is retained until an organization-wide bot rename is planned. Agents develop on branches and submit PRs, with human maintainer review under [`CODEOWNERS`](.github/CODEOWNERS). CI runs Node.js 22/24 and PostgreSQL/pgvector checks. Never store bot tokens in this repository.
+
+## End-to-end targeted discovery cycle (experimental)
+
+A new single command performs public discovery and evaluates only **new or source-changed** observations:
+
+```bash
+PIE_DISCOVERY_PER_SOURCE=8 PIE_DISCOVERY_MAX_ANALYZE=6 \
+  npm run discovery:cycle -- "turbopack webpackChunkName"
+```
+
+Stages:
+1. Search public GitHub issues and Hacker News stories; record the search run, content hashes, and account pseudonyms.
+2. Compare hits to the latest *completed* source-backed decision. Skip unchanged observations already marked `found`, `rejected`, or `none`. Retry prior `error` decisions.
+3. Run bounded Nemotron extraction and an independent source-evidence verifier only on the pending observations.
+4. Archive found/rejected/none/error decisions in PostgreSQL; compute local pgvector embeddings for verified findings.
+5. Consider only vector-nearest pairs touching newly verified observations, and ask the semantic reviewer to determine whether they express the same underlying problem.
+
+`PIE_DISCOVERY_MAX_ANALYZE` has a hard maximum of 20; `PIE_DISCOVERY_MAX_PAIRS` of 30. Paid OpenRouter model names are rejected. The report distinguishes source repetition from actual independent demand, which remains **unknown** even if equivalent posts are found.
+
+Running the same query again after all hits are reviewed will not call the LLM again unless the source content changes. The search itself still fetches current public results to detect changes.
+
+**Not a commercial validation service yet:** a recurrent technical issue may still have no market, willingness to pay, or viable solution.
