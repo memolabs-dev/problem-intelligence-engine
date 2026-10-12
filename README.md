@@ -298,3 +298,13 @@ npm run audit:provenance
 ```
 
 Corrections are new versioned `model_runs`/`model_decisions` with `provider=internal`, while older findings remain in the history. All downstream current-source queries use the latest accepted/rejected decision; the historical embedding can remain stored without being used as current evidence. To establish a firsthand claim from a secondary digest, follow its referenced original issue and verify that primary source separately. The title heuristic cannot detect every syndication or repost and is not an author identity proof.
+
+### Holdout quality preflight (P0)
+
+Before sending a holdout to human annotators, run:
+
+```bash
+npm run eval:quality-gate -- /tmp/pie-holdout-v2-blind.json /tmp/pie-holdout-v2-audit.json
+```
+
+Without file arguments the command assesses a fresh **in-memory** sampling proposal from the current local PostgreSQL corpus, and does not overwrite any frozen annotation files. It checks pair integrity, source duplication and concentration, cross-platform coverage and numbers of high/medium similarity *candidates*. In the current development corpus, 150 rows can still be inadequate because only two high-similarity candidates are available. A score of `ready_for_human_annotation` is **not** independent validation and does not imply any positive labels. Reviewers must be independent humans and disagreements must be adjudicated; no model precision/recall claim is warranted from this preflight.
