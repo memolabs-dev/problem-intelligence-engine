@@ -90,3 +90,23 @@ test('repeated pair review uses saved verdict and does not call the model again'
  const second=await runCorroboration(pool,opts);
  assert.equal(first.cachedPairs,0);assert.equal(second.cachedPairs,1);assert.equal(calls,1);
 });
+
+test('scoped semantic comparison only examines pairs involving newly verified observations',async()=>{
+ const {TARGETED_NEAREST_PAIRS_SQL}=await import('../packages/agents/corroborate.mjs');
+ const a=node('a'),b=node('b');
+ const calls=[];
+ const pool={query:async(sql,params)=>{
+  calls.push({sql,params});
+  if(sql===TARGETED_NEAREST_PAIRS_SQL)return {rows:[pair(a,b)]};
+  if(sql.includes('SELECT run_id AS'))return {rows:[a,b]};
+  if(sql.includes('FROM conversation_support s'))return {rows:[]};
+  if(sql.startsWith('SELECT verdict,rationale FROM corroboration_edges'))return {rows:[]};
+  if(sql.startsWith('INSERT INTO corroboration_edges'))return {rowCount:1};
+  throw Error('Unexpected query');
+ }};
+ const result=await runCorroboration(pool,{observationIds:['b'],threshold:0.5,maxPairs:3,reviewerModel:'test',judge:async()=>({verdict:'different_problem',rationale:'Different cause'})});
+ assert.equal(result.pairsEvaluated,1);
+ assert.equal(calls[0].sql,TARGETED_NEAREST_PAIRS_SQL);
+ assert.deepEqual(calls[0].params[3],['b']);
+ assert.match(TARGETED_NEAREST_PAIRS_SQL,/a\.observation_id=ANY\(\$4::text\[\]\)/);
+});

@@ -92,3 +92,27 @@ test('default batch chooses most recently published observations and snapshots s
   if(strategy===undefined)delete process.env.PIE_LLM_SELECTION;else process.env.PIE_LLM_SELECTION=strategy;
  }
 });
+
+test('explicit observation selection overrides inherited environment filters and respects budget',async()=>{
+ const old=process.env.PIE_LLM_OBSERVATION_IDS;
+ process.env.PIE_LLM_OBSERVATION_IDS='github:unrelated';
+ try{
+  let params;
+  const result=await batchExtractLLM({query:async(_sql,p)=>{params=p;return {rows:[{id:'github:intended'}]};}},{
+   observationIds:['github:intended','github:another','github:intended'],limit:1,extract:async()=>null
+  });
+  assert.deepEqual(params,[['github:intended']]);
+  assert.equal(result.total,1);
+ }finally{
+  if(old===undefined)delete process.env.PIE_LLM_OBSERVATION_IDS;
+  else process.env.PIE_LLM_OBSERVATION_IDS=old;
+ }
+});
+test('an explicit empty candidate list never selects unrelated recent observations',async()=>{
+ let queried=false;
+ const result=await batchExtractLLM({query:async()=>{queried=true;throw Error('should not query');}},{
+  observationIds:[],limit:3,extract:async()=>null
+ });
+ assert.equal(result.total,0);
+ assert.equal(queried,false);
+});

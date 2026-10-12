@@ -32,6 +32,10 @@ FROM current a JOIN current b ON a.observation_id < b.observation_id
 WHERE 1-(a.embedding <=> b.embedding)>=$2
 ORDER BY similarity DESC,a.observation_id,b.observation_id
 LIMIT $3`;
+export const TARGETED_NEAREST_PAIRS_SQL=NEAREST_PAIRS_SQL.replace(
+ 'WHERE 1-(a.embedding <=> b.embedding)>=$2',
+ 'WHERE 1-(a.embedding <=> b.embedding)>=$2 AND (a.observation_id=ANY($4::text[]) OR b.observation_id=ANY($4::text[]))'
+);
 
 export function validatePairVerdict(payload){
  if(!['same_problem','different_problem','uncertain'].includes(payload?.verdict))throw Error('Invalid pair verdict');
@@ -121,9 +125,12 @@ export function attachThreadSignals(groups,signalRows,allNodes=[]){
    threadRepliesAreIndependentSources:false};
  });
 }
-export async function runCorroboration(pool,{threshold=0.4,maxPairs=12,judge=verifyProblemPair,reviewerModel=process.env.PIE_LLM_MODEL||'unconfigured'}={}){
+export async function runCorroboration(pool,{threshold=0.4,maxPairs=12,observationIds=null,judge=verifyProblemPair,reviewerModel=process.env.PIE_LLM_MODEL||'unconfigured'}={}){
+ if(observationIds!==null&&(!Array.isArray(observationIds)||observationIds.length>100||observationIds.some(id=>typeof id!=='string'||!id)))throw new Error('Invalid targeted observation IDs');
  if(!Number.isFinite(threshold)||threshold<0||threshold>1||!Number.isInteger(maxPairs)||maxPairs<1||maxPairs>100)throw RangeError('Invalid corroboration search controls');
- const {rows}=await pool.query(NEAREST_PAIRS_SQL,[EMBEDDING_MODEL,threshold,maxPairs]);
+ const targeted=observationIds!==null;
+ const {rows}=await pool.query(targeted?TARGETED_NEAREST_PAIRS_SQL:NEAREST_PAIRS_SQL,
+  targeted?[EMBEDDING_MODEL,threshold,maxPairs,[...new Set(observationIds)]]:[EMBEDDING_MODEL,threshold,maxPairs]);
  const {rows:allNodes}=await pool.query(CURRENT_EMBEDDED_NODES_SQL,[EMBEDDING_MODEL]);
  const results=[];
  let cachedPairs=0;

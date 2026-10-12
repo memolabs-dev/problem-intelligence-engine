@@ -6,11 +6,15 @@ import {buildStoredEvidenceGraph} from './evidence-graph.mjs';
 import {selectForLLM} from './select.mjs';
 import {extractProblem} from './extract.mjs';
 
-export async function batchExtractLLM(pool,{limit=10,extract=extractWithLLM,onResult=()=>{},fallback=null}={}){
- const selectedIds=(process.env.PIE_LLM_OBSERVATION_IDS||'').split(',').map(x=>x.trim()).filter(Boolean);
+export async function batchExtractLLM(pool,{limit=10,observationIds=null,extract=extractWithLLM,onResult=()=>{},fallback=null}={}){
+ if(!Number.isInteger(limit)||limit<1||limit>500)throw new RangeError('Invalid LLM batch limit');
+ if(observationIds!==null&&(!Array.isArray(observationIds)||observationIds.length>500||observationIds.some(x=>typeof x!=='string'||!x.trim())))throw new Error('Invalid explicit observation IDs');
+ const selectedIds=observationIds!==null?[...new Set(observationIds)].slice(0,limit):(process.env.PIE_LLM_OBSERVATION_IDS||'').split(',').map(x=>x.trim()).filter(Boolean);
  const strategy=process.env.PIE_LLM_SELECTION||'recent';
  let rows;
- if(selectedIds.length){
+ if(observationIds!==null && selectedIds.length===0){
+  rows=[];
+ }else if(selectedIds.length){
   ({rows}=await pool.query('SELECT id,title,body,url,content_hash FROM observations WHERE id = ANY($1::text[]) ORDER BY id',[selectedIds]));
  }else if(strategy==='balanced'){
   const population=(await pool.query('SELECT id,title,body,url,content_hash FROM observations ORDER BY ingested_at DESC,id LIMIT $1',[Math.min(500,Math.max(limit*20,100))])).rows;
