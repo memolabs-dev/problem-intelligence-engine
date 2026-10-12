@@ -21,7 +21,9 @@
     "problems:search": "node packages/agents/search-problems.mjs",
     "discover:search": "node packages/ingestion/targeted.mjs",
     "discovery:cycle": "node --env-file-if-exists=.env packages/agents/discovery-cycle.mjs",
-    "problems:dossier": "node packages/agents/dossier.mjs"
+    "problems:dossier": "node packages/agents/dossier.mjs",
+    "eval:prepare-holdout": "node packages/agents/holdout.mjs",
+    "eval:review-holdout": "node packages/agents/holdout-review.mjs"
   },
   "dependencies": {
     "pg": "^8.23.1"
