@@ -153,3 +153,29 @@ The corpus for evaluation lives in `eval/corroboration-pairs.json`. It mixes par
 - Firsthand reply classifiers still require a human-labeled evaluation corpus. Until then they are model-screened signals, not validated demand.
 - The system currently distinguishes candidate recurrence and commentary, but does not infer *purchase intent* from volume.
 - Corrections to source content invalidate the matching stored source fingerprint; rerun extraction rather than reusing a stale claim.
+
+## Targeted recurrence research
+
+A verified problem is now a **starting point for further research**, not a declaration of market demand.
+
+Search the existing local verified problem archive by meaning (Ollama embeddings + pgvector KNN):
+
+```bash
+npm run problems:search -- "Turbopack fails to preserve names on dynamic import chunks"
+```
+
+The returned similarity is a retrieval score, not a semantic-equivalence verdict. Every result preserves its source URL and exact recorded evidence; `sameUnderlyingProblem` stays `not_reviewed`.
+
+Explore **new public source observations** with GitHub issue search and Hacker News Algolia story search:
+
+```bash
+PIE_DISCOVERY_PER_SOURCE=8 npm run discover:search -- "turbopack webpackChunkName"
+```
+
+The search is bounded (1–40 results per source), never scrapes gated content, and preserves failures from either provider. It saves results as **unverified raw observations** for subsequent extraction and review; no hit becomes a verified problem automatically. A search is auditable through `targeted_search_runs` and `targeted_search_hits`, including the original query and content hashes.
+
+The report distinguishes `uniqueObservations`, `distinctSourceAccounts` and `repeatedPostsFromKnownAccounts`. Different platform accounts do not prove different people; `verifiedIndependentHumans` remains unknown.
+
+**Example caution:** two nearly identical GitHub issues about `webpackChunkName` were filed by the same source account. They are two posts, not two confirmed independent users. A different issue about a bundler is a search hit, not necessarily the same problem.
+
+After targeted discovery, choose the new observation IDs for `PIE_LLM_OBSERVATION_IDS`, run `npm run llm:verified`, import the verified report and run `npm run embeddings:run`. Only then may the corroboration reviewer assess whether different threads refer to an equivalent problem.

@@ -109,3 +109,21 @@ CREATE TABLE IF NOT EXISTS conversation_support (
 );
 CREATE INDEX IF NOT EXISTS conversation_support_root_idx ON conversation_support(observation_id,verdict);
 ALTER TABLE conversation_support ADD COLUMN IF NOT EXISTS raw_verdict TEXT;
+
+-- Audit each targeted public search separately from the verified problem model.
+CREATE TABLE IF NOT EXISTS targeted_search_runs (
+ id UUID PRIMARY KEY,
+ query TEXT NOT NULL,
+ github_status TEXT NOT NULL,
+ hackernews_status TEXT NOT NULL,
+ searched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ matched_raw INTEGER NOT NULL CHECK (matched_raw>=0),
+ unique_observations INTEGER NOT NULL CHECK (unique_observations>=0)
+);
+CREATE TABLE IF NOT EXISTS targeted_search_hits (
+ run_id UUID NOT NULL REFERENCES targeted_search_runs(id) ON DELETE CASCADE,
+ observation_id TEXT NOT NULL REFERENCES observations(id) ON DELETE RESTRICT,
+ source_content_hash CHAR(64) NOT NULL,
+ PRIMARY KEY(run_id,observation_id)
+);
+CREATE INDEX IF NOT EXISTS targeted_search_hits_observation_idx ON targeted_search_hits(observation_id);
