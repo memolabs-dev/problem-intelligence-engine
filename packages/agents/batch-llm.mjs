@@ -8,7 +8,7 @@ export async function batchExtractLLM(pool,{limit=10,extract=extractWithLLM,onRe
  for(const row of rows){
   const started=Date.now();
   let result;
-  try{const extracted=await extract(row);result={observationId:row.id,status:extracted?'found':'none',...(extracted?{candidate:extracted}:{})};}
+  try{let extracted;try{extracted=await extract(row)}catch(error){if(!/Evidence quote not present in observation/.test(String(error?.message)))throw error;extracted=await extract(row)}result={observationId:row.id,status:extracted?'found':'none',...(extracted?{candidate:extracted}:{})};}
   catch(error){result={observationId:row.id,status:'error',error:error?.name==='TimeoutError'?'timeout':String(error?.message||error).slice(0,200)};}
   result.elapsedMs=Date.now()-started;results.push(result);onResult(result);
  }
