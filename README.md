@@ -359,3 +359,7 @@ Targeted discovery now attaches each candidate's **original discussion root** to
 ### Prefer novel corroboration across original discussions
 
 The semantic corroboration scheduler now excludes pairs whose two source observations belong to the **same original discussion**, and orders eligible pairs by **never reviewed under the current semantic policy first**, then vector similarity. This keeps repeated cached verdicts from consuming the limited review budget ahead of new, potentially independent conversations. Previously stored verdicts remain available for audit and cache reuse. Different discussions are not proof of distinct people or commercial demand. The selection is still model-screened and must not be treated as ground-truth labels.
+
+### Persistent corroboration groups across research runs
+
+The corroboration report now reconstructs its **global groups** from confirmed semantic verdicts persisted under the **current reviewer policy** and **current, source-grounded extraction runs**, not just the subset of pairs examined in this invocation. Running with zero new pairs will not hide an earlier valid corroboration; revising either source invalidates a stale edge for active grouping until reverified. `pairsEvaluated` remains the current execution's work, while `storedConfirmedPairs` and `activeConfirmedPairs` report historical accepted edges that still satisfy the current version checks. Multiple source observations are not proof of distinct people or buyers.
