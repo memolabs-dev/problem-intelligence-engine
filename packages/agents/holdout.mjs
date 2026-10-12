@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {readFile,writeFile,mkdir} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,access} from 'node:fs/promises';
 import {dirname} from 'node:path';
 import {createPool} from '../storage/postgres.mjs';
 import {EMBEDDING_MODEL} from './embed.mjs';
@@ -26,7 +26,13 @@ SELECT a.id AS left_id,a.title AS left_title,a.body AS left_body,a.source AS lef
  b.id AS right_id,b.title AS right_title,b.body AS right_body,b.source AS right_source,b.url AS right_url,
  b.reporter_key AS right_account,b.content_hash AS right_hash,
  1-(a.embedding <=> b.embedding) AS similarity
-FROM current a JOIN current b ON a.id<b.id ORDER BY a.id,b.id`;
+FROM current a JOIN current b ON a.id<b.id
+WHERE NOT EXISTS (
+ SELECT 1 FROM corroboration_edges previously_reviewed
+ WHERE (previously_reviewed.left_observation=a.id AND previously_reviewed.right_observation=b.id)
+    OR (previously_reviewed.left_observation=b.id AND previously_reviewed.right_observation=a.id)
+)
+ORDER BY a.id,b.id`;
 
 function digest(value){return createHash('sha256').update(value).digest('hex');}
 function siteRepo(url){
@@ -44,8 +50,15 @@ function pairBucket(row){
  return 'semantic_distant';
 }
 const BUCKETS=['repeated_account','cross_platform','same_repository','semantically_close','semantically_related','semantic_distant'];
+const CHALLENGE_BANDS=['near_miss_candidate','ambiguous_candidate','contextual_candidate','easy_negative_candidate'];
+function challengeBand(score){
+ if(score>=0.60)return CHALLENGE_BANDS[0];
+ if(score>=0.35)return CHALLENGE_BANDS[1];
+ if(score>=0.15)return CHALLENGE_BANDS[2];
+ return CHALLENGE_BANDS[3];
+}
 function cleanSnippet(value){
- return String(value||'').replace(/\s+/g,' ').trim().slice(0,1500);
+ return String(value||'').replace(/\\s+/g,' ').trim().slice(0,1500);
 }
 function validateSourceRow(row){
  const ids=['left_id','right_id'];
@@ -56,37 +69,62 @@ function validateSourceRow(row){
  if(!/^[0-9a-f]{64}$/.test(String(row.left_hash||'').trim())||!/^[0-9a-f]{64}$/.test(String(row.right_hash||'').trim()))return false;
  return Number.isFinite(Number(row.similarity));
 }
-export function sampleBlindPairs(rows,{target=150,seed='pie-holdout-v1',devIds=[]}={}){
+function sortedKey(row){return [row.left_id,row.right_id].sort().join('|');}
+export function sampleBlindPairs(rows,{target=150,seed='pie-holdout-v2',devIds=[],reviewedPairs=[]}={}){
  if(!Array.isArray(rows)||!Number.isInteger(target)||target<1||target>1000||typeof seed!=='string'||!seed.trim())throw Error('Invalid holdout sampling options');
- const dev=new Set(devIds),rejected={developerOverlap:0,invalid:0,duplicate:0};
- const buckets=new Map(BUCKETS.map(name=>[name,[]]));
- const seen=new Set();
+ if(!Array.isArray(reviewedPairs))throw Error('Invalid prior-reviewed pair exclusions');
+ const reviewed=new Set(reviewedPairs.map(p=>typeof p==='string'?p:(Array.isArray(p)?p:[p?.left,p?.right]).sort().join('|')));
+ const dev=new Set(devIds),rejected={developerOverlap:0,previouslyJudged:0,invalid:0,duplicate:0};
+ const candidates=[],seen=new Set();
  for(const row of rows){
   if(!validateSourceRow(row)){rejected.invalid++;continue;}
   if(dev.has(row.left_id)||dev.has(row.right_id)){rejected.developerOverlap++;continue;}
-  const [idA,idB]=[row.left_id,row.right_id].sort();
-  const key=idA+'|'+idB;
+  const key=sortedKey(row);
+  if(reviewed.has(key)){rejected.previouslyJudged++;continue;}
   if(seen.has(key)){rejected.duplicate++;continue;}
   seen.add(key);
-  buckets.get(pairBucket(row)).push(row);
+  candidates.push({...row,bucket:pairBucket(row),challengeBand:challengeBand(Number(row.similarity))});
  }
- for(const pairs of buckets.values())pairs.sort((a,b)=>{
-  const ha=digest(seed+':'+a.left_id+':'+a.right_id);
-  const hb=digest(seed+':'+b.left_id+':'+b.right_id);
-  return ha.localeCompare(hb);
- });
+ // Stratify by difficulty before provenance. Earlier source-first sampling
+ // buried almost all high-similarity candidates in its easy-negative majority.
+ // These are still unlabeled CANDIDATES and may all be negative.
+ const buckets=new Map(CHALLENGE_BANDS.map(name=>[name,new Map(BUCKETS.map(b=>[b,[]]))]));
+ for(const row of candidates)buckets.get(row.challengeBand).get(row.bucket).push(row);
+ for(const byProvenance of buckets.values()){
+  for(const pairs of byProvenance.values())pairs.sort((a,b)=>{
+   const ha=digest(seed+':'+sortedKey(a));
+   const hb=digest(seed+':'+sortedKey(b));
+   return ha.localeCompare(hb);
+  });
+ }
+ const desired=[Math.ceil(target*0.25),Math.ceil(target*0.35),Math.ceil(target*0.25),target];
  const selected=[];
- while(selected.length<target){
-  let changed=false;
-  for(const bucket of BUCKETS){
-   if(selected.length>=target)break;
-   const candidate=buckets.get(bucket).shift();
-   if(!candidate)continue;
-   selected.push({...candidate,bucket});
-   changed=true;
+ const sourceExposure=new Map();
+ const maxExposure=Math.max(12,Math.ceil(target*0.18));
+ function takeFromBand(name,maxTake,allowOverexposure=false){
+  const byProvenance=buckets.get(name);
+  let taken=0,changed=true;
+  while(taken<maxTake&&changed&&selected.length<target){
+   changed=false;
+   for(const bucket of BUCKETS){
+    if(taken>=maxTake||selected.length>=target)break;
+    const queue=byProvenance.get(bucket);
+    const index=queue.findIndex(row=>allowOverexposure||
+       (sourceExposure.get(row.left_id)||0)<maxExposure&&(sourceExposure.get(row.right_id)||0)<maxExposure);
+    if(index<0)continue;
+    const [row]=queue.splice(index,1);
+    selected.push(row);taken++;changed=true;
+    sourceExposure.set(row.left_id,(sourceExposure.get(row.left_id)||0)+1);
+    sourceExposure.set(row.right_id,(sourceExposure.get(row.right_id)||0)+1);
+   }
   }
-  if(!changed)break;
  }
+ CHALLENGE_BANDS.forEach((band,index)=>takeFromBand(band,desired[index]));
+ // Fill available slots while keeping any one source from dominating.
+ for(const band of CHALLENGE_BANDS)takeFromBand(band,target);
+ // Small archives can be so sparse that a strict exposure cap prevents reaching
+ // the target. Record the concentration rather than silently discard pairs.
+ if(selected.length<target)for(const band of CHALLENGE_BANDS)takeFromBand(band,target,true);
  const pairs=selected.map(row=>{
   const id=digest([row.left_id,row.left_hash,row.right_id,row.right_hash].join(':')).slice(0,24);
   return {pairId:id,
@@ -95,13 +133,19 @@ export function sampleBlindPairs(rows,{target=150,seed='pie-holdout-v1',devIds=[
   };
  });
  const counts=Object.fromEntries(BUCKETS.map(bucket=>[bucket,selected.filter(row=>row.bucket===bucket).length]));
+ const challengeCounts=Object.fromEntries(CHALLENGE_BANDS.map(b=>[b,selected.filter(row=>row.challengeBand===b).length]));
+ const availableChallengeCounts=Object.fromEntries(CHALLENGE_BANDS.map(b=>[b,candidates.filter(row=>row.challengeBand===b).length]));
  return {
   blind:{kind:'unlabeled_human_annotation_queue',independentHoldout:false,target,pairs},
   manifest:{kind:'sampling_audit',seed,target,selected:pairs.length,shortfall:Math.max(0,target-pairs.length),
-   candidatePool:rows.length,filtered:rejected,strata:counts,
-   selections:selected.map((row,index)=>({pairId:pairs[index].pairId,bucket:row.bucket,similarity:Number(row.similarity)})),
-   developmentExamplesExcluded:dev.size,
-   note:'Selection uses development embeddings; no labels are present. This is not an independently validated benchmark.'}
+   candidatePool:rows.length,eligibleCandidates:candidates.length,filtered:rejected,strata:counts,
+   challengeBands:challengeCounts,availableChallengeBands:availableChallengeCounts,
+   highSimilarityCandidateCount:selected.filter(row=>Number(row.similarity)>=0.60).length,
+   mediumSimilarityCandidateCount:selected.filter(row=>Number(row.similarity)>=0.35&&Number(row.similarity)<0.60).length,
+   maxSourceExposure:Math.max(0,...sourceExposure.values()),
+   selections:selected.map((row,index)=>({pairId:pairs[index].pairId,bucket:row.bucket,challengeBand:row.challengeBand,similarity:Number(row.similarity)})),
+   developmentExamplesExcluded:dev.size,leakagePolicy:'exclude_all_previous_semantic_model_reviewed_pairs',
+   note:'Difficulty prioritization is candidate mining, not labels or evidence of positive cases. This is not an independently validated benchmark.'}
  };
 }
 export function createAnnotationTemplate(blind,reviewer){
@@ -109,7 +153,7 @@ export function createAnnotationTemplate(blind,reviewer){
  if(blind?.kind!=='unlabeled_human_annotation_queue'||!Array.isArray(blind.pairs))throw Error('Invalid blind queue');
  return {kind:'human_pair_annotations',reviewer,annotations:blind.pairs.map(row=>({pairId:row.pairId,label:null,reason:null}))};
 }
-export async function prepareHoldout(pool,{target=150,maxNodes=200,seed='pie-holdout-v1',excludeDev=true}={}){
+export async function prepareHoldout(pool,{target=150,maxNodes=200,seed='pie-holdout-v2',excludeDev=true}={}){
  if(!Number.isInteger(maxNodes)||maxNodes<2||maxNodes>200)throw Error('Invalid maximum holdout nodes');
  const {rows}=await pool.query(HOLDOUT_PAIR_POOL_SQL,[maxNodes,seed,EMBEDDING_MODEL]);
  const devIds=excludeDev?JSON.parse(await readFile(new URL('../../eval/labels.json',import.meta.url),'utf8')).map(row=>row.id):[];
@@ -128,7 +172,12 @@ export async function writePreparedHoldout(report,prefix){
   [paths.reviewerA]:createAnnotationTemplate(report.blind,'reviewer-a'),
   [paths.reviewerB]:createAnnotationTemplate(report.blind,'reviewer-b')
  };
- for(const [path,value] of Object.entries(outputs))await writeFile(path,JSON.stringify(value,null,2)+'\n',{mode:0o600});
+ // A holdout must never silently overwrite a frozen review queue or answered template.
+ for(const path of Object.keys(outputs)){
+  try{await access(path);throw Error('Frozen holdout already exists: '+path);}
+  catch(error){if(error?.code!=='ENOENT')throw error;}
+ }
+ for(const [path,value] of Object.entries(outputs))await writeFile(path,JSON.stringify(value,null,2)+'\n',{mode:0o600,flag:'wx'});
  return paths;
 }
 if(process.argv[1]?.endsWith('/packages/agents/holdout.mjs')){
@@ -137,9 +186,9 @@ if(process.argv[1]?.endsWith('/packages/agents/holdout.mjs')){
   const report=await prepareHoldout(pool,{
    target:Number(process.env.PIE_HOLDOUT_TARGET||150),
    maxNodes:Number(process.env.PIE_HOLDOUT_MAX_NODES||200),
-   seed:process.env.PIE_HOLDOUT_SEED||'pie-holdout-v1'
+   seed:process.env.PIE_HOLDOUT_SEED||'pie-holdout-v2'
   });
-  const files=await writePreparedHoldout(report,process.env.PIE_HOLDOUT_OUTPUT||'/tmp/pie-holdout');
-  console.log(JSON.stringify({selected:report.manifest.selected,target:report.manifest.target,shortfall:report.manifest.shortfall,excludedDevelopmentPairs:report.manifest.filtered.developerOverlap,strata:report.manifest.strata,files,independentHoldout:false},null,2));
+  const files=await writePreparedHoldout(report,process.env.PIE_HOLDOUT_OUTPUT||'/tmp/pie-holdout-v2');
+  console.log(JSON.stringify({selected:report.manifest.selected,target:report.manifest.target,shortfall:report.manifest.shortfall,excludedDevelopmentPairs:report.manifest.filtered.developerOverlap,strata:report.manifest.strata,challengeBands:report.manifest.challengeBands,highSimilarityCandidateCount:report.manifest.highSimilarityCandidateCount,filteredPreviouslyJudged:report.manifest.filtered.previouslyJudged,files,independentHoldout:false},null,2));
  }finally{await pool.end();}
 }

@@ -99,3 +99,39 @@ test('holdout query uses source-current embeddings without model decision labels
  assert.equal(report.manifest.selected,1);
  assert.equal(report.blind.pairs.length,1);
 });
+
+test('previously LLM-reviewed pairs are never included in the blind pool',()=>{
+ const data=[pair(1,2,{similarity:0.95}),pair(3,4,{similarity:0.8})];
+ const result=sampleBlindPairs(data,{target:2,reviewedPairs:[['github:1','github:2']]});
+ assert.equal(result.manifest.filtered.previouslyJudged,1);
+ assert.equal(result.blind.pairs.length,1);
+ assert.equal(result.blind.pairs[0].left.observationId,'github:3');
+});
+test('challenge-first sampler does not bury high similarity in a sea of easy negatives',()=>{
+ const data=[pair(1,2,{similarity:0.8}),pair(2,3,{similarity:0.4}),...Array.from({length:50},(_,i)=>pair(i+10,i+100,{similarity:0.1}))];
+ const result=sampleBlindPairs(data,{target:10,seed:'balanced-test'});
+ assert.equal(result.manifest.challengeBands.near_miss_candidate,1);
+ assert.equal(result.manifest.challengeBands.ambiguous_candidate,1);
+ assert.ok(result.manifest.challengeBands.easy_negative_candidate>0);
+ assert.equal(result.blind.independentHoldout,false);
+ assert.ok(!JSON.stringify(result.blind).includes('challengeBands'));
+});
+test('source-current holdout SQL prevents leakage from old model-reviewed pairs',()=>{
+ assert.match(HOLDOUT_PAIR_POOL_SQL,/NOT EXISTS \([\s\S]*FROM corroboration_edges previously_reviewed/);
+ assert.match(HOLDOUT_PAIR_POOL_SQL,/previously_reviewed\.right_observation=a\.id/);
+});
+test('frozen holdout export cannot replace an existing annotation queue',async()=>{
+ const {writePreparedHoldout}=await import('../packages/agents/holdout.mjs');
+ const {mkdtemp,readFile,rm}=await import('node:fs/promises');
+ const {tmpdir}=await import('node:os');
+ const {join}=await import('node:path');
+ const folder=await mkdtemp(join(tmpdir(),'pie-holdout-protect-'));
+ try{
+  const prefix=join(folder,'immutable');
+  const report=sampleBlindPairs([pair(1,2)],{target:1});
+  const outputs=await writePreparedHoldout(report,prefix);
+  const content=await readFile(outputs.blind,'utf8');
+  await assert.rejects(writePreparedHoldout(report,prefix),/Frozen holdout already exists/);
+  assert.equal(await readFile(outputs.blind,'utf8'),content);
+ }finally{await rm(folder,{recursive:true,force:true});}
+});
