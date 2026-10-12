@@ -355,3 +355,7 @@ The sampling audit (not the annotator-facing blind queue) now includes the **ori
 ### Prioritize distinct source discussions within the LLM budget
 
 Targeted discovery now attaches each candidate's **original discussion root** to the search report and prioritizes candidates from different discussions. It continues to alternate reporting surfaces (GitHub issue, Hacker News story/comment); only when there are fewer distinct roots than available analysis slots may a second comment from the same thread be chosen. The report exposes `distinctOriginalThreadsSelected` alongside `observationIdsAnalyzed` for auditing. This reduces redundant model calls but does **not** establish independent human identities, semantic corroboration or commercial demand.
+
+### Prefer novel corroboration across original discussions
+
+The semantic corroboration scheduler now excludes pairs whose two source observations belong to the **same original discussion**, and orders eligible pairs by **never reviewed under the current semantic policy first**, then vector similarity. This keeps repeated cached verdicts from consuming the limited review budget ahead of new, potentially independent conversations. Previously stored verdicts remain available for audit and cache reuse. Different discussions are not proof of distinct people or commercial demand. The selection is still model-screened and must not be treated as ground-truth labels.
