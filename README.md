@@ -369,3 +369,17 @@ The corroboration report now reconstructs its **global groups** from confirmed s
 Run `npm run eval:embedding-retrieval` to compare Ollama's current `all-minilm` vectors on the eight **synthetic development** corroboration examples. The report lists positive/negative cosine similarity ranges, overlap, and confusion counts for multiple retrieval thresholds. It does **not** invoke a paid model or make any inference about real demand, human independence, or production precision. Set `PIE_EMBED_DIAGNOSTIC_REPORT_PATH=/tmp/pie-embedding-dev.json` to save a private (`0600`) JSON report. Synthetic labels were created during model development and **must not be promoted to the independent holdout**.
 
 This tool is intended to expose false positive semantic neighbors and missed paraphrases before investing in alternative local embedding models. The semantic reviewer still decides actual equivalence after candidate retrieval.
+
+### Compare installed Ollama embedding models safely (development only)
+
+To compare **local-only** embedding models without changing production pgvector dimensions or overwriting stored vectors:
+
+```bash
+PIE_EMBED_COMPARE_MODELS='all-minilm,nomic-embed-text' \
+  PIE_EMBED_COMPARE_REPORT_PATH=/tmp/pie-local-model-comparison.json \
+  npm run eval:compare-embeddings
+```
+
+The comparison calls only local Ollama (`127.0.0.1:11434`), supports different vector dimensions, and reports within-model cosine similarities, candidate retrieval thresholds, and pairwise synthetic ranking AUC. Optional JSON reports are private and cannot silently overwrite an existing file. **The eight input pairs are synthetic development cases, not a held-out benchmark**; all numbers must be labeled development-only. Similarity thresholds are model-specific and must never be copied between models without calibration.
+
+Local developer smoke test (October 2026): `all-minilm` and `nomic-embed-text` each ranked 11/15 synthetic positive-negative comparisons correctly (development AUC approximately 0.733). Their score ranges overlap; neither clearly wins and no production model change was made. Independently annotated real-source positives and hard negatives are required before choosing a replacement model.
