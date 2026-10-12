@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validatePairVerdict,verifyProblemPair,compileCorroborationGroups,runCorroboration,NEAREST_PAIRS_SQL,attachThreadSignals} from '../packages/agents/corroborate.mjs';
+import {validatePairVerdict,verifyProblemPair,compileCorroborationGroups,runCorroboration,NEAREST_PAIRS_SQL,attachThreadSignals,STORED_SAME_PROBLEM_EDGES_SQL,currentStoredCorroborations} from '../packages/agents/corroborate.mjs';
 
 const node=(id,accountKey=null)=>({id,runId:'00000000-0000-5000-a000-000000000001',statement:'Some reported issue at '+id,source:'github',url:'https://github.com/a/b/issues/'+id,accountKey});
 const pair=(a,b)=>({
@@ -51,6 +51,7 @@ test('corroboration run keeps an explicit verdict without auto-merging',async()=
   if(sql===NEAREST_PAIRS_SQL)return {rows:[pair(a,b)]};
   if(sql.includes('SELECT run_id AS'))return {rows:[a,b]};
   if(sql.includes('FROM conversation_support s'))return {rows:[]};
+  if(sql===STORED_SAME_PROBLEM_EDGES_SQL)return {rows:[]};
   return {rowCount:1};
  }};
  const result=await runCorroboration(pool,{judge:async()=>({verdict:'different_problem',rationale:'Different cause'}),reviewerModel:'mock'});
@@ -81,6 +82,7 @@ test('repeated pair review uses saved verdict and does not call the model again'
   if(sql===NEAREST_PAIRS_SQL)return {rows:[pair(a,b)]};
   if(sql.includes('SELECT run_id AS'))return {rows:[a,b]};
   if(sql.includes('FROM conversation_support s'))return {rows:[]};
+  if(sql===STORED_SAME_PROBLEM_EDGES_SQL)return {rows:[]};
   if(sql.startsWith('SELECT verdict,rationale FROM corroboration_edges'))return {rows:stored?[stored]:[]};
   if(sql.startsWith('INSERT INTO corroboration_edges')){stored={verdict:args[5],rationale:args[6]};return {rowCount:1};}
   throw Error('unexpected SQL');
@@ -100,6 +102,7 @@ test('scoped semantic comparison only examines pairs involving newly verified ob
   if(sql===TARGETED_NEAREST_PAIRS_SQL)return {rows:[pair(a,b)]};
   if(sql.includes('SELECT run_id AS'))return {rows:[a,b]};
   if(sql.includes('FROM conversation_support s'))return {rows:[]};
+  if(sql===STORED_SAME_PROBLEM_EDGES_SQL)return {rows:[]};
   if(sql.startsWith('SELECT verdict,rationale FROM corroboration_edges'))return {rows:[]};
   if(sql.startsWith('INSERT INTO corroboration_edges'))return {rowCount:1};
   throw Error('Unexpected query');
@@ -117,4 +120,33 @@ test('semantic retrieval never wastes comparison budget on same original thread 
  assert.match(NEAREST_PAIRS_SQL,/prior\.model=\$4/);
  assert.match(NEAREST_PAIRS_SQL,/CASE WHEN EXISTS/);
  assert.match(NEAREST_PAIRS_SQL,/THEN 1 ELSE 0 END/);
+});
+
+test('confirmed corroborations persist in the global graph across runs with no new pairs',async()=>{
+ const a=node('historical-a','user-a'),b=node('historical-b','user-b');
+ const stored={left_run:a.runId,left_observation:a.id,right_run:b.runId,right_observation:b.id,verdict:'same_problem'};
+ let reviewed=0;
+ const pool={query:async(sql,args)=>{
+  if(sql===NEAREST_PAIRS_SQL)return {rows:[]};
+  if(sql.includes('SELECT run_id AS'))return {rows:[a,b]};
+  if(sql.includes('FROM conversation_support s'))return {rows:[]};
+  if(sql===STORED_SAME_PROBLEM_EDGES_SQL){assert.match(args[0],/same-problem-v2$/);return {rows:[stored]};}
+  throw Error('Unexpected SQL');
+ }};
+ const result=await runCorroboration(pool,{reviewerModel:'mock',judge:async()=>{reviewed++;throw Error('Do not rejudge');}});
+ assert.equal(result.pairsEvaluated,0);
+ assert.equal(result.storedConfirmedPairs,1);
+ assert.equal(result.activeConfirmedPairs,1);
+ assert.equal(result.groups.length,1);
+ assert.equal(result.groups[0].observationCount,2);
+ assert.equal(result.groups[0].distinctDiscussionCount,2);
+ assert.equal(reviewed,0);
+});
+
+test('prior accepted edge is invalid when either source has a new model run',()=>{
+ const a=node('old-a'),b=node('old-b');
+ const old={left_run:a.runId,left_observation:a.id,right_run:'previous-run',right_observation:b.id,verdict:'same_problem'};
+ assert.deepEqual(currentStoredCorroborations([old],[a,b]),[]);
+ const valid={...old,right_run:b.runId};
+ assert.deepEqual(currentStoredCorroborations([valid,valid,old],[a,b]),[{left_id:a.id,right_id:b.id,verdict:'same_problem'}]);
 });

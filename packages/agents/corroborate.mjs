@@ -84,6 +84,29 @@ export async function verifyProblemPair(pair,{fetcher=fetch,env=process.env}={})
  try{payload=JSON.parse(call.function.arguments);}catch{throw Error('Invalid corroboration tool arguments');}
  return validatePairVerdict(payload);
 }
+export const STORED_SAME_PROBLEM_EDGES_SQL=`
+SELECT left_run,left_observation,right_run,right_observation,verdict
+FROM corroboration_edges
+WHERE model=$1 AND verdict='same_problem'`;
+
+/** Restore confirmed edges only when BOTH endpoints still correspond to the
+ * current verified source snapshot. Previous revisions must not leak into
+ * the active evidence graph, and a policy change invalidates prior verdicts.
+ */
+export function currentStoredCorroborations(rows,allNodes){
+ const current=new Map(allNodes.map(node=>[node.id,node.runId]));
+ const result=[],seen=new Set();
+ for(const edge of rows){
+  if(edge.verdict!=='same_problem'||edge.left_observation===edge.right_observation||
+   current.get(edge.left_observation)!==edge.left_run||
+   current.get(edge.right_observation)!==edge.right_run)continue;
+  const key=[edge.left_observation,edge.right_observation].sort().join('|');
+  if(seen.has(key))continue;
+  seen.add(key);
+  result.push({left_id:edge.left_observation,right_id:edge.right_observation,verdict:'same_problem'});
+ }
+ return result;
+}
 export function compileCorroborationGroups(pairs,edges,allNodes=[]){
  const nodes=new Map(allNodes.map(node=>[node.id,node]));
  for(const pair of pairs){
@@ -164,8 +187,17 @@ export async function runCorroboration(pool,{threshold=0.4,maxPairs=12,observati
  JOIN conversation_messages m ON m.id=s.message_id
  WHERE s.observation_id=ANY($1::text[]) AND s.verdict IN ('firsthand_same_problem','agreement_only')`,
  [allNodes.map(n=>n.id)]):{rows:[]};
- const groups=attachThreadSignals(compileCorroborationGroups(rows,results,allNodes),replySignals,allNodes);
- return {pairsEvaluated:results.length,cachedPairs,verifiedSameProblem:results.filter(r=>r.verdict==='same_problem').length,rejectedPairs:results.filter(r=>r.verdict==='different_problem').length,uncertain:results.filter(r=>r.verdict==='uncertain').length,errors:results.filter(r=>r.verdict==='error').length,pairs:results.map(({left_id,right_id,...publicResult})=>publicResult),embeddedCandidates:allNodes.length,groups};
+ const {rows:storedSameEdges}=await pool.query(STORED_SAME_PROBLEM_EDGES_SQL,[modelKey]);
+ const prior=currentStoredCorroborations(storedSameEdges,allNodes);
+ const allConfirmed=new Map(prior.map(e=>[[e.left_id,e.right_id].sort().join('|'),e]));
+ // Newly accepted verdicts are already persisted above. Include them in the
+ // in-memory result as well so test doubles see the same graph as PostgreSQL.
+ for(const edge of results.filter(e=>e.verdict==='same_problem')){
+  const key=[edge.left_id,edge.right_id].sort().join('|');
+  if(!allConfirmed.has(key))allConfirmed.set(key,{left_id:edge.left_id,right_id:edge.right_id,verdict:'same_problem'});
+ }
+ const groups=attachThreadSignals(compileCorroborationGroups([], [...allConfirmed.values()],allNodes),replySignals,allNodes);
+ return {pairsEvaluated:results.length,cachedPairs,storedConfirmedPairs:prior.length,activeConfirmedPairs:allConfirmed.size,verifiedSameProblem:results.filter(r=>r.verdict==='same_problem').length,rejectedPairs:results.filter(r=>r.verdict==='different_problem').length,uncertain:results.filter(r=>r.verdict==='uncertain').length,errors:results.filter(r=>r.verdict==='error').length,pairs:results.map(({left_id,right_id,...publicResult})=>publicResult),embeddedCandidates:allNodes.length,groups};
 }
 if(process.argv[1]?.endsWith('/packages/agents/corroborate.mjs')){
  const pool=createPool();
