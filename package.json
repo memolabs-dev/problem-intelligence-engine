@@ -28,7 +28,8 @@
     "audit:provenance": "node packages/agents/audit-provenance.mjs",
     "eval:quality-gate": "node packages/agents/holdout-quality.mjs",
     "eval:annotation-ui": "node packages/agents/annotation-ui.mjs",
-    "eval:embedding-retrieval": "node packages/agents/evaluate-embeddings.mjs"
+    "eval:embedding-retrieval": "node packages/agents/evaluate-embeddings.mjs",
+    "eval:compare-embeddings": "node packages/agents/compare-embeddings.mjs"
   },
   "dependencies": {
     "pg": "^8.23.1"
