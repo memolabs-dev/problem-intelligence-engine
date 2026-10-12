@@ -308,3 +308,15 @@ npm run eval:quality-gate -- /tmp/pie-holdout-v2-blind.json /tmp/pie-holdout-v2-
 ```
 
 Without file arguments the command assesses a fresh **in-memory** sampling proposal from the current local PostgreSQL corpus, and does not overwrite any frozen annotation files. It checks pair integrity, source duplication and concentration, cross-platform coverage and numbers of high/medium similarity *candidates*. In the current development corpus, 150 rows can still be inadequate because only two high-similarity candidates are available. A score of `ready_for_human_annotation` is **not** independent validation and does not imply any positive labels. Reviewers must be independent humans and disagreements must be adjudicated; no model precision/recall claim is warranted from this preflight.
+
+### Offline human annotation interface (P0)
+
+Create a private, **self-contained HTML page** from a previously frozen blind queue:
+
+```bash
+npm run eval:annotation-ui -- /tmp/pie-holdout-v2-blind.json /tmp/pie-reviewer-a.html
+```
+
+Open the resulting local HTML file in Safari or another browser. Review one source pair at a time, follow public source links when needed, choose `same_problem`, `different_problem` or `uncertain`, and write a rationale. Export your answers as a private JSON file compatible with `eval:review-holdout`; an imported JSON file can also restore previously exported answers. Do not share one annotator's responses with another until both have completed independent reviews.
+
+The HTML has no remote scripts, network requests or external UI frameworks. It shows neither similarity scores nor model judgments. The generated file embeds source excerpts and is written privately (`0600`), refusing to overwrite an existing review file. Reviewer pseudonyms do **not** prove independent human identity. This interface does not replace the requirement for external annotation and adjudication.
