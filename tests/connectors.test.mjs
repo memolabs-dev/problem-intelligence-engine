@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {normalizeHackerNews,fetchHackerNews} from '../packages/connectors/hackernews.mjs';
+import {normalizeGithubIssue,fetchGithubIssues} from '../packages/connectors/github.mjs';
+test('HN provenance',()=>{const x=normalizeHackerNews({id:42,type:'story',title:'Pain',time:100});assert.equal(x.id,'hackernews:42');assert.ok(x.contentHash);});
+test('deleted HN excluded',()=>assert.equal(normalizeHackerNews({id:1,type:'story',deleted:true}),null));
+test('GitHub PR excluded',()=>assert.equal(normalizeGithubIssue({id:1,pull_request:{}}),null));
+test('GitHub issue provenance',()=>assert.equal(normalizeGithubIssue({id:4,html_url:'https://github.com/a/b/issues/4'}).id,'github:4'));
+test('HN API with fixture',async()=>{const a=await fetchHackerNews([42],{fetcher:async()=>({ok:true,json:async()=>({id:42,type:'story',title:'Pain'})})});assert.equal(a.length,1);});
+test('GitHub API with fixture',async()=>{const a=await fetchGithubIssues('a','b',{fetcher:async()=>({ok:true,json:async()=>[{id:4,html_url:'https://github.com/a/b/issues/4'}]})});assert.equal(a.length,1);});
+test('reject invalid repo',async()=>await assert.rejects(fetchGithubIssues('../a','b')));
