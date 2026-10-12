@@ -363,3 +363,9 @@ The semantic corroboration scheduler now excludes pairs whose two source observa
 ### Persistent corroboration groups across research runs
 
 The corroboration report now reconstructs its **global groups** from confirmed semantic verdicts persisted under the **current reviewer policy** and **current, source-grounded extraction runs**, not just the subset of pairs examined in this invocation. Running with zero new pairs will not hide an earlier valid corroboration; revising either source invalidates a stale edge for active grouping until reverified. `pairsEvaluated` remains the current execution's work, while `storedConfirmedPairs` and `activeConfirmedPairs` report historical accepted edges that still satisfy the current version checks. Multiple source observations are not proof of distinct people or buyers.
+
+### Local embedding retrieval diagnostics (development only)
+
+Run `npm run eval:embedding-retrieval` to compare Ollama's current `all-minilm` vectors on the eight **synthetic development** corroboration examples. The report lists positive/negative cosine similarity ranges, overlap, and confusion counts for multiple retrieval thresholds. It does **not** invoke a paid model or make any inference about real demand, human independence, or production precision. Set `PIE_EMBED_DIAGNOSTIC_REPORT_PATH=/tmp/pie-embedding-dev.json` to save a private (`0600`) JSON report. Synthetic labels were created during model development and **must not be promoted to the independent holdout**.
+
+This tool is intended to expose false positive semantic neighbors and missed paraphrases before investing in alternative local embedding models. The semantic reviewer still decides actual equivalence after candidate retrieval.
