@@ -7,13 +7,14 @@ export async function saveTargetedSearchAudit(pool,report,observations){
  const bySource=new Map(report.sources.map(item=>[item.source,item]));
  const github=bySource.get('github')?.status||'not_run';
  const hn=bySource.get('hackernews')?.status||'not_run';
+ const comments=bySource.get('hackernews_comments')?.status||'not_run';
  const client=await pool.connect();
  try{
   await client.query('BEGIN');
   await client.query(`INSERT INTO targeted_search_runs
-   (id,query,github_status,hackernews_status,matched_raw,unique_observations)
-   VALUES ($1,$2,$3,$4,$5,$6)`,
-   [runId,report.query,github,hn,report.matchedRaw,report.uniqueObservations]);
+   (id,query,github_status,hackernews_status,matched_raw,unique_observations,hackernews_comments_status)
+   VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+   [runId,report.query,github,hn,report.matchedRaw,report.uniqueObservations,comments]);
   for(const o of observations){
    if(!o?.id||!o?.contentHash)throw Error('Incomplete search hit');
    await client.query(`INSERT INTO targeted_search_hits

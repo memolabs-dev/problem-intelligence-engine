@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto';
-export function normalizeObservation({ source, externalId, url, title = '', body = '', publishedAt = null, reporterKey = null }) {
+export function normalizeObservation({ source, externalId, url, title = '', body = '', publishedAt = null, reporterKey = null, threadRootId = null }) {
   if (!['github', 'hackernews'].includes(source)) throw new Error('Unsupported source');
   if (!externalId || !url?.startsWith('https://')) throw new Error('Missing identity or HTTPS URL');
   const contentHash = createHash('sha256').update(`${title}\n${body}`).digest('hex');
-  return { id: `${source}:${externalId}`, source, externalId: String(externalId), url, title, body, publishedAt, contentHash, reporterKey };
+  const id=`${source}:${externalId}`;
+  const root=threadRootId??id;
+  if(typeof root!=='string'||!root.startsWith(source+':'))throw Error('Invalid source thread root');
+  return { id, source, externalId: String(externalId), url, title, body, publishedAt, contentHash, reporterKey, threadRootId:root };
 }

@@ -43,6 +43,34 @@ export async function findPendingObservations(pool,ids){
 }
 
 /**
+ * Interleave new candidates by reporting surface rather than letting
+ * GitHub search results consume the entire LLM budget before any HN comment
+ * is considered. This does NOT promote comments to independent discussions.
+ */
+export function selectDiverseDiscoveryCandidates(ids,types={},limit=6){
+ if(!Array.isArray(ids)||!Number.isInteger(limit)||limit<1||limit>20)throw Error('Invalid candidate selection');
+ const order=['hackernews_comment','github_issue','hackernews_story','other'];
+ const groups=new Map(order.map(t=>[t,[]])),seen=new Set();
+ for(const id of ids){
+  if(typeof id!=='string'||!id||seen.has(id))continue;
+  seen.add(id);
+  const inferred=id.startsWith('github:')?'github_issue':id.startsWith('hackernews:')?'hackernews_story':'other';
+  const group=groups.has(types[id])?types[id]:inferred;
+  groups.get(group).push(id);
+ }
+ const chosen=[];
+ while(chosen.length<limit){
+  let changed=false;
+  for(const type of order){
+   if(chosen.length>=limit)break;
+   const next=groups.get(type).shift();
+   if(next){chosen.push(next);changed=true;}
+  }
+  if(!changed)break;
+ }
+ return chosen;
+}
+/**
  * Bounded discovery cycle:
  * public source search -> source-revision aware triage -> LLM evidence screening
  * -> persisted decisions -> local embeddings -> scoped semantic pairing.
@@ -51,7 +79,7 @@ export async function findPendingObservations(pool,ids){
  * Injectable seams allow full test coverage without paid APIs.
  */
 export async function runDiscoveryCycle(pool,query,{
- perSource=8,maxAnalyze=6,maxPairs=10,similarityThreshold=0.55,
+ perSource=8,maxAnalyze=6,maxPairs=10,similarityThreshold=0.55,includeHNComments=false,
  model='nvidia/nemotron-3.5-lightning:free',env=process.env,
  discovery=runTargetedDiscovery,pendingLookup=findPendingObservations,
  analyze=verifiedBatchExtractLLM,persist=persistVerifiedRun,
@@ -67,9 +95,9 @@ export async function runDiscoveryCycle(pool,query,{
  const config=resolveLLMConfig(llmEnv);
  if(!config.apiKey)throw Error('Missing OpenRouter key; no discovery requests made');
 
- const search=await discovery(pool,query,{perSource});
+ const search=await discovery(pool,query,{perSource,includeHNComments});
  const selection=await pendingLookup(pool,search.observationIds);
- const selected=selection.pending.slice(0,maxAnalyze);
+ const selected=selectDiverseDiscoveryCandidates(selection.pending,search.observationTypes||{},maxAnalyze);
  const summary={
   query,model,sourceSearch:search,
   pendingBeforeLimit:selection.pending.length,
@@ -123,7 +151,8 @@ if(process.argv[1]?.endsWith('/packages/agents/discovery-cycle.mjs')){
    perSource:Number(process.env.PIE_DISCOVERY_PER_SOURCE||8),
    maxAnalyze:Number(process.env.PIE_DISCOVERY_MAX_ANALYZE||6),
    maxPairs:Number(process.env.PIE_DISCOVERY_MAX_PAIRS||10),
-   similarityThreshold:Number(process.env.PIE_DISCOVERY_SIMILARITY||0.55)
+   similarityThreshold:Number(process.env.PIE_DISCOVERY_SIMILARITY||0.55),
+   includeHNComments:process.env.PIE_INCLUDE_HN_COMMENTS==='1'
   });
   console.log('DISCOVERY_CYCLE',JSON.stringify(report,null,2));
   if(report.sourceSearch.incomplete||report.extraction.error||report.embeddings?.errors||report.corroboration?.errors)process.exitCode=1;

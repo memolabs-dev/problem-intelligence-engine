@@ -25,7 +25,7 @@ export function buildEvidenceGraph(report,observations,{similarityThreshold=0.6}
   if(!sourceText.includes(candidate.excerpt)){issues.push({observationId:item.observationId,reason:'quote_not_in_source'});continue;}
   if(typeof candidate.sourceUrl==='string'&&candidate.sourceUrl!==observation.url){issues.push({observationId:item.observationId,reason:'source_url_mismatch'});continue;}
   if(item.verification?.accept!==true){issues.push({observationId:item.observationId,reason:'unverified_candidate'});continue;}
-  found.push({statement:candidate.statement,observationId:item.observationId,sourceUrl:observation.url,source:observation.source??item.observationId.split(':')[0],excerpt:candidate.excerpt,category:item.verification.category??null,reportedBy:observation.reporter_key||observation.reporterKey||null});
+  found.push({statement:candidate.statement,observationId:item.observationId,sourceUrl:observation.url,source:observation.source??item.observationId.split(':')[0],excerpt:candidate.excerpt,category:item.verification.category??null,reportedBy:observation.reporter_key||observation.reporterKey||null,threadRootId:observation.thread_root_id||observation.threadRootId||item.observationId});
  }
  const clusters=clusterProblems(found,{threshold:similarityThreshold});
  const problems=clusters.map((cluster,index)=>{
@@ -37,9 +37,10 @@ export function buildEvidenceGraph(report,observations,{similarityThreshold=0.6}
   const identitiesKnown=reporterIds.every(Boolean);
   const uniqueReporters=identitiesKnown?new Set(reporterIds).size:null;
   const multipleReports=observationsIds.length>1;
-  const corroboration=!multipleReports?'single_observation':identitiesKnown&&uniqueReporters>1?'multiple_distinct_accounts_independence_unverified':'multiple_observations_reporter_independence_unknown';
+  const distinctDiscussions=new Set(members.map(m=>m.threadRootId)).size;
+  const corroboration=!multipleReports?'single_observation':distinctDiscussions===1?'multiple_observations_single_discussion':identitiesKnown&&uniqueReporters>1?'multiple_distinct_accounts_independence_unverified':'multiple_observations_reporter_independence_unknown';
   return {
-   id:`group-${index+1}`,statement:cluster.representative,observationCount:observationsIds.length,sourceUrlCount:urls.length,platformCount:platforms.length,
+   id:`group-${index+1}`,statement:cluster.representative,observationCount:observationsIds.length,sourceUrlCount:urls.length,platformCount:platforms.length,distinctDiscussionCount:distinctDiscussions,
    distinctReporterAccountCount:uniqueReporters,verifiedIndependentReporterCount:null,
    corroboration,commercialValidation:'unknown',marketRelevance:'not_assessed',paymentEvidence:'unknown',
    observations:observationsIds,sources:platforms,
@@ -52,6 +53,6 @@ export function buildEvidenceGraph(report,observations,{similarityThreshold=0.6}
 export async function buildStoredEvidenceGraph(pool,report,options={}){
  const ids=[...new Set((report?.results||[]).filter(item=>item.status==='found').map(item=>item.observationId))];
  if(!ids.length)return buildEvidenceGraph(report,[],options);
- const {rows}=await pool.query('SELECT id,title,body,url,source,reporter_key FROM observations WHERE id=ANY($1::text[])',[ids]);
+ const {rows}=await pool.query('SELECT id,title,body,url,source,reporter_key,thread_root_id FROM observations WHERE id=ANY($1::text[])',[ids]);
  return buildEvidenceGraph(report,rows,options);
 }

@@ -330,3 +330,20 @@ The read-only `eval:quality-gate` now reports **distinct contributing observatio
 ### Search rate-limit classification
 
 Public GitHub search can fail with HTTP 403/429 when unauthenticated requests exhaust a quota. The targeted discovery report now records `reason: rate_limited` (plus a bounded `retryAfterSeconds` hint where supplied), separately from `http_error` and successful zero-result searches. Such a partial discovery is **not** evidence of zero recurring problems. Provide `GITHUB_TOKEN` explicitly in a private local environment to use an authorized quota; never commit or print tokens.
+
+## Recent Hacker News comments as firsthand discovery leads
+
+Hacker News story titles often do not contain the useful problem evidence. The discovery engine can now search **recent public comments**, using Algolia, in addition to GitHub issues and HN stories:
+
+```bash
+PIE_INCLUDE_HN_COMMENTS=1 PIE_DISCOVERY_PER_SOURCE=10 \
+  npm run discover:search -- 'coding agents'
+PIE_INCLUDE_HN_COMMENTS=1 PIE_DISCOVERY_MAX_ANALYZE=4 \
+  npm run discovery:cycle -- 'coding agents'
+```
+
+The optional third provider is bounded to 1–40 results and a maximum 10-year lookback (default 730 days). Its recent hits must contain a sufficient share of the query's distinguishing words before reaching the LLM, because Algolia's recency ranking can surface unrelated results. Some genuine implicit complaints may be missed by this conservative lexical gate.
+
+Each comment is stored as an observation with an exact source URL, the original HTML source text, a pseudonymous **account key**, and a **`thread_root_id` pointing to the HN story**. Two comments in the same thread are *not two independent discussions*, even when they were posted by different accounts. The evidence graph, semantic clusters, dossiers, and blinded holdout all respect this root; paired comments from one thread are excluded from the cross-discussion holdout.
+
+Comment results are unverified until the same source-quote and semantic-review process runs. A comment that quotes another person's issue is not proof that the commenter experienced it. The standalone public search, extraction, and indexing stages remain independently auditable; comment search failures do not silently disappear from provider status.

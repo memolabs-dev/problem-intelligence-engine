@@ -80,3 +80,13 @@ test('free model guard and invalid limits fail before public search',async()=>{
  await assert.rejects(runDiscoveryCycle({},'CSV streaming import fails',{...opts,env:{}}),/Missing OpenRouter key/);
  assert.equal(called,0);
 });
+
+test('source-diverse selection includes HN comments before exhausting model budget on GitHub',async()=>{
+ const {selectDiverseDiscoveryCandidates}=await import('../packages/agents/discovery-cycle.mjs');
+ const ids=['github:1','github:2','hackernews:3','hackernews:4','hackernews:5'];
+ const types={'github:1':'github_issue','github:2':'github_issue','hackernews:3':'hackernews_story','hackernews:4':'hackernews_comment','hackernews:5':'hackernews_comment'};
+ const chosen=selectDiverseDiscoveryCandidates(ids,types,3);
+ assert.deepEqual(chosen,['hackernews:4','github:1','hackernews:3']);
+ assert.equal(new Set(chosen).size,3);
+ assert.deepEqual(selectDiverseDiscoveryCandidates(ids,types,2),['hackernews:4','github:1']);
+});

@@ -11,7 +11,7 @@ WITH latest AS (
  FROM model_decisions md JOIN model_runs r ON r.id=md.run_id
 )
 SELECT l.run_id,l.observation_id,l.statement,l.excerpt,l.qualification,
- o.title,o.source,o.url,o.reporter_key
+ o.title,o.source,o.url,o.reporter_key,o.thread_root_id
 FROM latest l JOIN observations o ON o.id=l.observation_id
 WHERE l.rn=1 AND l.observation_id=$1 AND l.status='found'
 AND l.source_content_hash=o.content_hash`;
@@ -26,7 +26,7 @@ WITH related AS (
  AND e.model=$3 AND e.verdict='same_problem'
 )
 SELECT DISTINCT ON (o.id)
- o.id,o.title,o.source,o.url,o.reporter_key,
+ o.id,o.title,o.source,o.url,o.reporter_key,o.thread_root_id,
  linked.statement,linked.excerpt,related.rationale
 FROM related
 JOIN observations o ON o.id=related.related_id
@@ -58,6 +58,7 @@ export function assembleDossier(root,related,threadSignals){
  const accountKeys=[root.reporter_key,...links.map(row=>row.reporter_key)];
  const accountsComplete=accountKeys.every(Boolean);
  const distinctAccounts=accountsComplete?new Set(accountKeys).size:null;
+ const discussionRoots=new Set([root.thread_root_id||root.observation_id,...links.map(row=>row.thread_root_id||row.id)]);
  const firsthand=new Set(),agreement=new Set();
  for(const row of threadSignals){
   if(!row.author_key||root.reporter_key===row.author_key||typeof row.excerpt!=='string'||row.excerpt.length<12)continue;
@@ -71,6 +72,7 @@ export function assembleDossier(root,related,threadSignals){
   evidence:{source:root.source,url:root.url,title:root.title,excerpt:root.excerpt},
   corroboration:{
    sameProblemObservations:links.length+1,
+   distinctSourceDiscussions:discussionRoots.size,
    distinctKnownSourceAccounts:distinctAccounts,
    independentlyVerifiedPeople:null,
    duplicatePostsByRootAccount:root.reporter_key?links.filter(x=>x.reporter_key===root.reporter_key).length:0,

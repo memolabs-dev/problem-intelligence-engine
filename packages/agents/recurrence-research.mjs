@@ -103,7 +103,7 @@ export async function saveRecurrenceProbe(pool,{seed,query,result,status}){
  return id;
 }
 export async function runRecurrenceResearch(pool,{
- observationIds=[],maxSeeds=3,maxQueries=2,perSource=5,maxAnalyze=2,maxPairs=5,
+ observationIds=[],maxSeeds=3,maxQueries=2,perSource=5,maxAnalyze=2,maxPairs=5,includeHNComments=true,
  similarityThreshold=0.55,dryRun=false,
  loadSeeds=loadVerifiedSeeds,cycle=runDiscoveryCycle,saveAudit=saveRecurrenceProbe
 }={}){
@@ -112,7 +112,7 @@ export async function runRecurrenceResearch(pool,{
  !Number.isInteger(perSource)||perSource<1||perSource>10||
  !Number.isInteger(maxAnalyze)||maxAnalyze<1||maxAnalyze>5||
  !Number.isInteger(maxPairs)||maxPairs<1||maxPairs>10||
- !Number.isFinite(similarityThreshold)||similarityThreshold<0||similarityThreshold>1)
+ !Number.isFinite(similarityThreshold)||similarityThreshold<0||similarityThreshold>1||typeof includeHNComments!=='boolean')
  throw Error('Invalid bounded recurrence budget');
  const seeds=await loadSeeds(pool,{observationIds,maxSeeds});
  const seenQueries=new Set(),plan=[];
@@ -124,7 +124,7 @@ export async function runRecurrenceResearch(pool,{
   }
  }
  const summary={
-  planner:RECURRENCE_PLANNER_VERSION,dryRun,budget:{maxSeeds,maxQueries,perSource,maxAnalyze,maxPairs},
+  planner:RECURRENCE_PLANNER_VERSION,dryRun,budget:{maxSeeds,maxQueries,perSource,maxAnalyze,maxPairs,includeHNComments},
   seeds:seeds.map(seed=>({id:seed.id,source:seed.source})),
   plannedProbes:plan.length,completed:0,partial:0,failed:0,results:[],
   commercialValidation:'unknown',independentDemandEstablished:false
@@ -136,7 +136,7 @@ export async function runRecurrenceResearch(pool,{
  for(const {seed,query} of plan){
   let result,status;
   try{
-   result=await cycle(pool,query,{perSource,maxAnalyze,maxPairs,similarityThreshold});
+   result=await cycle(pool,query,{perSource,maxAnalyze,maxPairs,similarityThreshold,includeHNComments});
    status=result.sourceSearch?.incomplete||result.extraction?.error||result.corroboration?.errors?'partial':'completed';
   }catch(error){
    status='error';
@@ -168,7 +168,8 @@ if(process.argv[1]?.endsWith('/packages/agents/recurrence-research.mjs')){
    maxAnalyze:Number(process.env.PIE_RECURRENCE_MAX_ANALYZE||2),
    maxPairs:Number(process.env.PIE_RECURRENCE_MAX_PAIRS||5),
    similarityThreshold:Number(process.env.PIE_RECURRENCE_SIMILARITY||0.55),
-   dryRun:process.env.PIE_RECURRENCE_DRY_RUN==='1'
+   dryRun:process.env.PIE_RECURRENCE_DRY_RUN==='1',
+   includeHNComments:process.env.PIE_RECURRENCE_INCLUDE_HN_COMMENTS!=='0'
   });
   console.log('RECURRENCE_RESEARCH',JSON.stringify(report,null,2));
   if(report.failed||report.partial)process.exitCode=1;

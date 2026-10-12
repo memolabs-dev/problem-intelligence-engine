@@ -14,3 +14,21 @@ export async function fetchHackerNews(ids, { fetcher=fetch, limit=20 }={}) {
   }
   return result;
 }
+
+/** HN Algolia search hits are individual public comments. Preserve their
+ * parent STORY identity so multiple replies cannot masquerade as independent
+ * public discussions. Body may contain HN HTML; evidence remains verbatim.
+ */
+export function normalizeHackerNewsSearchComment(hit){
+ const id=String(hit?.objectID??'');
+ const root=String(hit?.story_id??'');
+ if(!/^\d+$/.test(id)||!/^\d+$/.test(root)||typeof hit.comment_text!=='string'||hit.comment_text.trim().length<12)return null;
+ return normalizeObservation({
+  source:'hackernews',externalId:id,
+  url:'https://news.ycombinator.com/item?id='+id,
+  title:'',body:hit.comment_text,
+  publishedAt:Number.isInteger(hit.created_at_i)?new Date(hit.created_at_i*1000).toISOString():null,
+  reporterKey:accountKey('hackernews',hit.author??null),
+  threadRootId:'hackernews:'+root
+ });
+}
