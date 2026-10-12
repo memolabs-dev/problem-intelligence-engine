@@ -56,8 +56,8 @@ export function rankNovelCrossDiscussionPairs(rows,embeddings,priorEdges=[],{lim
   exposure.set(row.rightId,(exposure.get(row.rightId)||0)+1);
   const distinctAccounts=row.left.source===row.right.source&&row.left.reporter_key&&row.right.reporter_key
    ?row.left.reporter_key!==row.right.reporter_key:null;
-  result.push({left:{id:row.leftId,url:row.left.url,source:row.left.source,statement:row.left.statement},
-   right:{id:row.rightId,url:row.right.url,source:row.right.source,statement:row.right.statement},
+  result.push({left:{id:row.leftId,runId:row.left.run_id,url:row.left.url,source:row.left.source,statement:row.left.statement},
+   right:{id:row.rightId,runId:row.right.run_id,url:row.right.url,source:row.right.source,statement:row.right.statement},
    similarity:Number(row.similarity.toFixed(4)),platformPair:row.platformPair,
    distinctSourceAccounts:distinctAccounts,independentlyVerifiedHumans:null,
    semanticEquivalence:'unreviewed',commercialDemand:'unknown'});

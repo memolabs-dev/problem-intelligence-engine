@@ -44,3 +44,9 @@ The source corpus consists of public posts and can contain incidental personal i
 ### Discussion independence after the HN comment connector
 
 Public HN comments retain `thread_root_id` pointing to the parent story. A pair of comments within the same story is not a cross-discussion independent source pair even if two pseudonymous accounts posted it. The holdout query excludes these same-root pairs. Human annotators should still distinguish *same underlying technical problem* from *different problem*: the annotation label itself does not assert distinct human identities. HN search queries that retrieve comments are filtered by relevant words before LLM screening; consequently the sampled corpus is **not** a representative random sample of online discussion.
+
+### Technical P0 release handoff
+
+The automated evidence collection, provenance, alternative retrieval, source-current model corroboration, quality preflight and offline reviewer UI can be considered implementation-complete once CI is green. The separate P0 **independent-validation acceptance criterion** cannot pass without two real human reviewers and an adjudicated, frozen, appropriately challenging blind holdout.
+
+An annotator uses `npm run eval:annotation-ui -- /absolute/private/holdout-blind.json /absolute/private/reviewer-a.html` and repeats for a separate reviewer. Both must export their own private results. Validate with `npm run eval:review-holdout -- <blind> <reviewer-a> <reviewer-b> [predictions]`, keeping source snapshots and review provenance. Do not use the model's own predictions to fill human annotation templates, and do not close issue #3 until the independent evaluation is actually completed.
