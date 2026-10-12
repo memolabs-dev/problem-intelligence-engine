@@ -1,0 +1,54 @@
+{
+  "kind": "development_synthetic_cases",
+  "independentHoldout": false,
+  "cases": [
+    {
+      "id": "manual-finance",
+      "expected": "same_problem",
+      "left": "Our finance team manually exports invoices from the ERP into the accounting system every morning because the systems cannot exchange data.",
+      "right": "We spend hours re-entering bookkeeping records from our ERP into our ledger because the two tools have no sync."
+    },
+    {
+      "id": "csv-stream",
+      "expected": "same_problem",
+      "left": "Our CSV parser reads entire files into memory, making large-data processing impractical.",
+      "right": "Importing huge CSV datasets requires full heap allocation instead of streaming, causing performance and memory issues."
+    },
+    {
+      "id": "agents-state",
+      "expected": "same_problem",
+      "left": "Our coding agents do not share discoveries, so developers copy context from one terminal to another.",
+      "right": "Claude and Codex keep separate state and I have to manually transfer what one agent learned to the other."
+    },
+    {
+      "id": "turbopack-distinct",
+      "expected": "different_problem",
+      "left": "Turbopack ignores webpackChunkName and outputs incorrectly named dynamic chunks.",
+      "right": "Turbopack spawns hundreds of webpack-loader processes on CI and exhausts memory."
+    },
+    {
+      "id": "deno-distinct",
+      "expected": "different_problem",
+      "left": "The documentation claims Deno supports ref() but the method is missing.",
+      "right": "The Deno desktop runtime cannot resolve internal node:net imports and crashes."
+    },
+    {
+      "id": "node-crypto-distinct",
+      "expected": "different_problem",
+      "left": "Node scrypt leaves a stale OpenSSL error after maxmem parameter rejection.",
+      "right": "Node crypto crashes on uncommon elliptic curve certificates due to a legacy conversion bug."
+    },
+    {
+      "id": "browser-vs-finance",
+      "expected": "different_problem",
+      "left": "Routing in a web browser sometimes produces an invalid URL.",
+      "right": "Finance administrators must transfer invoices between disconnected ledger systems."
+    },
+    {
+      "id": "csv-vs-router",
+      "expected": "different_problem",
+      "left": "CSV parser cannot stream rows without loading the entire file.",
+      "right": "Router firmware upgrade fails during installation and leaves the device offline."
+    }
+  ]
+}

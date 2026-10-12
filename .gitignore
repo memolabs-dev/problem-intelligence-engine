@@ -10,3 +10,7 @@ build/
 *.log
 
 llm-batch-report.json
+
+# Local model experiments can contain source excerpts and should not be committed.
+llm-*.json
+llm-*.jsonl

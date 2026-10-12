@@ -1,7 +1,8 @@
 import { normalizeObservation } from './normalize.mjs';
+import {accountKey} from './identity.mjs';
 export function normalizeGithubIssue(issue) {
   if (!issue || issue.pull_request || !issue.html_url || !issue.id) return null;
-  return normalizeObservation({ source:'github', externalId:issue.id, url:issue.html_url, title:issue.title ?? '', body:issue.body ?? '', publishedAt:issue.created_at ?? null });
+  return normalizeObservation({ source:'github', externalId:issue.id, url:issue.html_url, title:issue.title ?? '', body:issue.body ?? '', publishedAt:issue.created_at ?? null, reporterKey:accountKey('github',issue.user?.id) });
 }
 export async function fetchGithubIssues(owner, repo, { fetcher=fetch, token, perPage=30 }={}) {
   if (!/^[\w.-]+$/.test(owner) || !/^[\w.-]+$/.test(repo)) throw new Error('Invalid repository');

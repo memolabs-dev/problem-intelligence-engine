@@ -20,3 +20,54 @@ test('uses env-resolved provider endpoint and key',async()=>{let seen;const resu
 test('blocks paid OpenRouter models before making a request',async()=>{let called=false;await assert.rejects(extractWithLLM(observation,{env:{PIE_LLM_PROVIDER:'openrouter',OPENROUTER_API_KEY:'fake',PIE_LLM_MODEL:'openai/gpt-4.1-mini'},fetcher:async()=>{called=true}}),/must end in :free/);assert.equal(called,false)});
 
 test('empty reasoning response reports finish reason',async()=>{await assert.rejects(extractWithLLM(observation,{apiKey:'test',fetcher:async()=>({ok:true,json:async()=>({choices:[{finish_reason:'length',message:{content:null,reasoning:'thinking'}}]})})}),/finish_reason=length/)});
+
+test('numbered evidence rejects mismatched quote without an API call',async()=>{
+ const {evidencePassages}=await import('../packages/agents/llm.mjs');
+ const passages=evidencePassages(observation);assert.ok(passages.length);
+ const resolved=validateExtraction({problem:{statement:'Large CSV parsing fails in the app',evidenceId:1,evidenceQuote:'We need to split the file manually.'}},observation);assert.equal(resolved.excerpt,passages[0].quote);
+ assert.throws(()=>validateExtraction({problem:{statement:'Large CSV parsing fails in the app',evidenceId:999}},observation),/Evidence ID and quote mismatch/);
+ const valid=validateExtraction({problem:{statement:'Large CSV parsing fails in the app',evidenceId:1,evidenceQuote:passages[0].quote}},observation);assert.equal(valid.excerpt,passages[0].quote);
+});
+
+
+test('Nemotron requests suppress unsupported response_format and cap reasoning',async()=>{
+ let sent;
+ const result=await extractWithLLM(observation,{env:{PIE_LLM_PROVIDER:'openrouter',PIE_LLM_MODEL:'nvidia/nemotron-3.5-lightning:free',OPENROUTER_API_KEY:'mock'},fetcher:async(_url,opts)=>{sent=JSON.parse(opts.body);return {ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:'{"problem":{"statement":"Parsing CSV files fails for large uploads","evidenceId":1}}'}}]})}}});
+ assert.equal(sent.model,'nvidia/nemotron-3.5-lightning:free');
+ assert.equal(sent.response_format,undefined);
+ assert.equal(sent.reasoning.effort,'none');
+ assert.equal(sent.max_tokens,4096);
+ assert.equal(result.excerpt,observation.title);
+});
+test('detects reasoning exhaustion without mistaking it for a valid empty problem',async()=>{
+ await assert.rejects(extractWithLLM(observation,{apiKey:'mock',fetcher:async()=>({ok:true,json:async()=>({choices:[{finish_reason:'length',message:{content:null,reasoning:'not exposed'}}],usage:{completion_tokens_details:{reasoning_tokens:2400}}})})}),err=>err.code==='LLM_OUTPUT_TRUNCATED'&&err.reasoningTokens===2400);
+});
+test('rejects non-JSON content with recoverable typed error',async()=>{
+ await assert.rejects(extractWithLLM(observation,{apiKey:'mock',fetcher:async()=>({ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:'not json'}}]})})}),err=>err.code==='LLM_INVALID_JSON');
+});
+
+
+test('forced Nemotron tool call resolves a source-linked evidenceId',async()=>{
+ let sent;
+ const result=await extractWithLLM(observation,{env:{PIE_LLM_PROVIDER:'openrouter',OPENROUTER_API_KEY:'mock',PIE_LLM_MODEL:'nvidia/nemotron-3.5-lightning:free'},fetcher:async(_url,opts)=>{
+  sent=JSON.parse(opts.body);
+  return {ok:true,json:async()=>({choices:[{finish_reason:'tool_calls',message:{content:null,tool_calls:[{function:{name:'submit_extraction',arguments:JSON.stringify({has_problem:true,statement:'Large CSV uploads fail in the application',evidenceId:1})}}]}}]})};
+ }});
+ assert.equal(sent.tool_choice.function.name,'submit_extraction');assert.equal(sent.response_format,undefined);
+ assert.equal(result.excerpt,observation.title);
+});
+test('forced Nemotron tool explicitly supports no problem',async()=>{
+ const result=await extractWithLLM(observation,{env:{PIE_LLM_PROVIDER:'openrouter',OPENROUTER_API_KEY:'mock',PIE_LLM_MODEL:'nvidia/nemotron-3.5-lightning:free'},fetcher:async()=>({ok:true,json:async()=>({choices:[{finish_reason:'tool_calls',message:{tool_calls:[{function:{name:'submit_extraction',arguments:'{"has_problem":false,"statement":"","evidenceId":0}'}}]}}]})})});
+ assert.equal(result,null);
+});
+test('forced tool with invented evidenceId still fails grounding',async()=>{
+ await assert.rejects(extractWithLLM(observation,{env:{PIE_LLM_PROVIDER:'openrouter',OPENROUTER_API_KEY:'mock',PIE_LLM_MODEL:'nvidia/nemotron-3.5-lightning:free'},fetcher:async()=>({ok:true,json:async()=>({choices:[{finish_reason:'tool_calls',message:{tool_calls:[{function:{name:'submit_extraction',arguments:'{"has_problem":true,"statement":"Large files break uploading workflows","evidenceId":999}'}}]}}]})})}),/Evidence ID and quote mismatch/);
+});
+
+
+test('rejects evidence identifiers omitted from the model prompt',()=>{
+ const huge={id:'long',url:'https://example.org',title:'A source title describing a concrete problem',body:Array.from({length:90},(_,i)=>'Observation sentence '+i+' is a complete distinct source statement.').join(' ')};
+ assert.throws(()=>validateExtraction({problem:{statement:'A concrete problem described by the source',evidenceId:81}},huge),/Evidence ID and quote mismatch/);
+ const longQuote={id:'long-quote',url:'https://example.org',title:'A'.repeat(510),body:''};
+ assert.throws(()=>validateExtraction({problem:{statement:'A concrete problem in source body',evidenceId:1}},longQuote),/Evidence ID and quote mismatch/);
+});

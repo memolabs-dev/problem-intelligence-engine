@@ -1,7 +1,8 @@
 import { normalizeObservation } from './normalize.mjs';
+import {accountKey} from './identity.mjs';
 export function normalizeHackerNews(item) {
   if (!item || item.deleted || item.dead || !['story','ask','show'].includes(item.type)) return null;
-  return normalizeObservation({ source:'hackernews', externalId:item.id, url:`https://news.ycombinator.com/item?id=${item.id}`, title:item.title ?? '', body:item.text ?? '', publishedAt:item.time ? new Date(item.time*1000).toISOString() : null });
+  return normalizeObservation({ source:'hackernews', externalId:item.id, url:`https://news.ycombinator.com/item?id=${item.id}`, title:item.title ?? '', body:item.text ?? '', publishedAt:item.time ? new Date(item.time*1000).toISOString() : null, reporterKey:accountKey('hackernews',item.by) });
 }
 export async function fetchHackerNews(ids, { fetcher=fetch, limit=20 }={}) {
   const result=[];

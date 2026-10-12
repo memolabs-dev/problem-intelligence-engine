@@ -8,7 +8,16 @@
     "test": "node --test tests/*.test.mjs",
     "score": "node packages/scoring/score.mjs",
     "llm:check": "node --env-file-if-exists=.env packages/agents/check-config.mjs",
-    "llm:batch": "node --env-file-if-exists=.env packages/agents/batch-llm.mjs"
+    "llm:batch": "node --env-file-if-exists=.env packages/agents/batch-llm.mjs",
+    "llm:verified": "PIE_LLM_PROVIDER=openrouter PIE_LLM_MODEL=nvidia/nemotron-3.5-lightning:free PIE_LLM_VERIFY=1 node --env-file-if-exists=.env packages/agents/batch-llm.mjs",
+    "db:migrate": "node packages/storage/migrate.mjs",
+    "llm:import": "node packages/storage/model-runs.mjs",
+    "llm:graph": "node packages/agents/graph-report.mjs",
+    "threads:ingest": "node packages/ingestion/conversations.mjs",
+    "embeddings:run": "node packages/agents/embed.mjs",
+    "corroboration:run": "node --env-file-if-exists=.env packages/agents/corroborate.mjs",
+    "threads:review": "node --env-file-if-exists=.env packages/agents/comment-support.mjs",
+    "corroboration:evaluate": "node --env-file-if-exists=.env packages/agents/evaluate-corroboration.mjs"
   },
   "dependencies": {
     "pg": "^8.23.1"
