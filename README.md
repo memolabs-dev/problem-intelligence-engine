@@ -383,3 +383,17 @@ PIE_EMBED_COMPARE_MODELS='all-minilm,nomic-embed-text' \
 The comparison calls only local Ollama (`127.0.0.1:11434`), supports different vector dimensions, and reports within-model cosine similarities, candidate retrieval thresholds, and pairwise synthetic ranking AUC. Optional JSON reports are private and cannot silently overwrite an existing file. **The eight input pairs are synthetic development cases, not a held-out benchmark**; all numbers must be labeled development-only. Similarity thresholds are model-specific and must never be copied between models without calibration.
 
 Local developer smoke test (October 2026): `all-minilm` and `nomic-embed-text` each ranked 11/15 synthetic positive-negative comparisons correctly (development AUC approximately 0.733). Their score ranges overlap; neither clearly wins and no production model change was made. Independently annotated real-source positives and hard negatives are required before choosing a replacement model.
+
+### Mine novel real-source pairs with an alternative local embedding model (P0)
+
+After verifying public source reports and saving their source-current extraction decisions, run:
+
+```bash
+PIE_ALTERNATE_EMBED_MODEL=nomic-embed-text \
+  PIE_ALTERNATE_MAX_NODES=100 PIE_ALTERNATE_MAX_PAIRS=12 \
+  PIE_ALTERNATE_MIN_SIMILARITY=0.4 \
+  PIE_ALTERNATE_MINING_REPORT_PATH=/tmp/pie-alternate-pairs.json \
+  npm run research:alternate-pairs
+```
+
+This is a **development candidate-mining** tool, not a corroboration verdict. It loads only latest source-current, model-screened problems, computes alternative embeddings **in memory only** using localhost Ollama, and ranks previously unreviewed pairs from different original conversations. It excludes current-snapshot pairs already semantically decided, caps each source's exposure and reports source URLs for manual inspection. It neither writes vectors to production pgvector nor sends any candidate to a semantic or paid model. The optional JSON report is private, refuses overwrites and never exposes account hashes. Similarity scores are not comparable between embedding models without calibration. Mined pairs must **not** be inserted into a frozen independent holdout without a fresh sampling protocol and leakage review.
