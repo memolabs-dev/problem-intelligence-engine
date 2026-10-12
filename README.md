@@ -326,3 +326,7 @@ The HTML has no remote scripts, network requests or external UI frameworks. It s
 Recurrence probes now use **compact GitHub search strings** (2–4 discriminative technical words instead of long AND-style phrases). The search planner is versioned `source-recurrence-probes-v3`. Source search failures (including rate limits) remain explicit; never treat an HTTP 403 as evidence that no similar problem exists. Supply an authorized `GITHUB_TOKEN` through your normal local secret configuration when available; do not commit tokens.
 
 The read-only `eval:quality-gate` now reports **distinct contributing observation IDs per platform** for cross-platform pairs. Many pairs produced from only a few Hacker News sources are not diverse independent evidence. At least eight distinct observations from the less represented platform are expected under the default development gate; this does **not** prove independence of people, original conversations, or market demand. The blind annotator view still excludes these internal diagnostics.
+
+### Search rate-limit classification
+
+Public GitHub search can fail with HTTP 403/429 when unauthenticated requests exhaust a quota. The targeted discovery report now records `reason: rate_limited` (plus a bounded `retryAfterSeconds` hint where supplied), separately from `http_error` and successful zero-result searches. Such a partial discovery is **not** evidence of zero recurring problems. Provide `GITHUB_TOKEN` explicitly in a private local environment to use an authorized quota; never commit or print tokens.

@@ -14,6 +14,26 @@ function perSourceLimit(limit){
  if(!Number.isInteger(limit)||limit<1||limit>40)throw RangeError('Per-source result limit must be 1..40');
  return limit;
 }
+export async function explainGitHubSearchFailure(response){
+ const remaining=response?.headers?.get?.('x-ratelimit-remaining');
+ const retryAfter=Number(response?.headers?.get?.('retry-after'));
+ let apiMessage='';
+ if(response.status===403){
+  try{apiMessage=String((await response.json())?.message||'').slice(0,300);}
+  catch{ /* GitHub may reject with an empty body. */ }
+ }
+ const limited=response.status===429||(response.status===403&&(
+  remaining==='0'||Number.isFinite(retryAfter)&&retryAfter>0||
+  /(?:secondary )?rate limit exceeded|API rate limit/i.test(apiMessage)
+ ));
+ const error=new Error(limited
+  ?'GitHub search rate limit reached; results are incomplete. Configure GITHUB_TOKEN or retry later.'
+  :'GitHub search HTTP '+response.status);
+ error.code=limited?'rate_limited':'http_error';
+ error.httpStatus=response.status;
+ if(limited&&Number.isFinite(retryAfter)&&retryAfter>0)error.retryAfterSeconds=Math.min(Math.ceil(retryAfter),3600);
+ return error;
+}
 export async function searchPublicGitHub(query,{fetcher=fetch,limit=10,token}={}){
  query=validateResearchQuery(query);perSourceLimit(limit);
  const q=encodeURIComponent(query+' in:title,body is:issue');
@@ -21,7 +41,7 @@ export async function searchPublicGitHub(query,{fetcher=fetch,limit=10,token}={}
  const headers={Accept:'application/vnd.github+json','User-Agent':'problem-intelligence-engine'};
  if(token)headers.Authorization='Bearer '+token;
  const response=await fetcher(url,{headers,signal:AbortSignal.timeout(25000)});
- if(!response.ok)throw Error('GitHub search HTTP '+response.status);
+ if(!response.ok)throw await explainGitHubSearchFailure(response);
  const data=await response.json();
  if(!Array.isArray(data.items))throw Error('Invalid GitHub search response');
  return data.items.slice(0,limit).map(normalizeGithubIssue).filter(Boolean);
@@ -46,7 +66,9 @@ export async function runTargetedDiscovery(pool,query,{fetcher=fetch,perSource=1
  const names=['github','hackernews'];
  const statuses=attempts.map((attempt,index)=>attempt.status==='fulfilled'
   ?{source:names[index],status:'ok',fetched:attempt.value.length}
-  :{source:names[index],status:'error',error:String(attempt.reason?.message||attempt.reason).slice(0,160)});
+  :{source:names[index],status:'error',reason:attempt.reason?.code||'provider_error',
+    ...(attempt.reason?.retryAfterSeconds?{retryAfterSeconds:attempt.reason.retryAfterSeconds}:{}),
+    error:String(attempt.reason?.message||attempt.reason).slice(0,160)});
  const observations=attempts.flatMap(x=>x.status==='fulfilled'?x.value:[]);
  const unique=[...new Map(observations.map(o=>[o.id,o])).values()];
  if(unique.length)await persist(pool,unique);
