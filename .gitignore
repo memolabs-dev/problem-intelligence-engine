@@ -8,3 +8,5 @@ coverage/
 dist/
 build/
 *.log
+
+llm-batch-report.json
