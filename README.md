@@ -209,3 +209,13 @@ Stages:
 Running the same query again after all hits are reviewed will not call the LLM again unless the source content changes. The search itself still fetches current public results to detect changes.
 
 **Not a commercial validation service yet:** a recurrent technical issue may still have no market, willingness to pay, or viable solution.
+
+## Evidence dossier (local, read-only)
+
+Once two posts are semantically related, the maintainer can inspect a **source-grounded dossier**, with no further inference API calls:
+
+```bash
+npm run problems:dossier -- github:5814924941
+```
+
+The dossier includes the original verified quote, related corroboration edges, URLs and the reviewer's rationale. It explicitly distinguishes **two reports from the same account** from independent reporter accounts. It never claims verified distinct humans or a commercially validated opportunity. Discussion support is only shown when the original quote remains present verbatim in the current comment.
