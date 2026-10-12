@@ -33,7 +33,8 @@
     "research:alternate-pairs": "node packages/agents/mine-alternate-pairs.mjs",
     "research:review-alternate": "node --env-file-if-exists=.env packages/agents/review-alternate-pairs.mjs",
     "eval:adjudicate-holdout": "node packages/agents/holdout-adjudication.mjs",
-    "diagnostics:knn": "node packages/agents/knn-audit.mjs"
+    "diagnostics:knn": "node packages/agents/knn-audit.mjs",
+    "market:hypothesis": "node packages/agents/market-hypothesis.mjs"
   },
   "dependencies": {
     "pg": "^8.23.1"
