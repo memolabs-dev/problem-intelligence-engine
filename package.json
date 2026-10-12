@@ -26,7 +26,8 @@
     "eval:review-holdout": "node packages/agents/holdout-review.mjs",
     "recurrence:research": "node --env-file-if-exists=.env packages/agents/recurrence-research.mjs",
     "audit:provenance": "node packages/agents/audit-provenance.mjs",
-    "eval:quality-gate": "node packages/agents/holdout-quality.mjs"
+    "eval:quality-gate": "node packages/agents/holdout-quality.mjs",
+    "eval:annotation-ui": "node packages/agents/annotation-ui.mjs"
   },
   "dependencies": {
     "pg": "^8.23.1"
