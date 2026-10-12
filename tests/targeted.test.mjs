@@ -50,3 +50,42 @@ test('invalid search cannot make network calls',async()=>{
  await assert.rejects(runTargetedDiscovery(null,'bad',{fetcher:()=>{calls++;}}),/8..180/);
  assert.equal(calls,0);
 });
+
+
+test('GitHub 403 rate-limit response is not treated as an empty result',async()=>{
+ const fetcher=async url=>url.startsWith('https://api.github.com')?{
+  ok:false,status:403,headers:{get:key=>key==='x-ratelimit-remaining'?'0':null},
+  json:async()=>({message:'API rate limit exceeded'})
+ }:mockFetch(url);
+ const report=await runTargetedDiscovery(null,'Deno worker unref',{
+  fetcher,persist:async()=>{}
+ });
+ assert.equal(report.incomplete,true);
+ assert.equal(report.sources[0].status,'error');
+ assert.equal(report.sources[0].reason,'rate_limited');
+ assert.ok(report.sources[0].error.includes('results are incomplete'));
+ assert.equal(report.sources[1].status,'ok');
+});
+test('GitHub rate-limit retry hints are bounded and 403 authorization is separate',async()=>{
+ const {explainGitHubSearchFailure}=await import('../packages/ingestion/targeted.mjs');
+ const limited=await explainGitHubSearchFailure({
+  status:429,headers:{get:key=>key==='retry-after'?'36000':null}
+ });
+ assert.equal(limited.code,'rate_limited');
+ assert.equal(limited.retryAfterSeconds,3600);
+ const forbidden=await explainGitHubSearchFailure({
+  status:403,headers:{get:()=>null},
+  json:async()=>({message:'Resource not accessible by integration'})
+ });
+ assert.equal(forbidden.code,'http_error');
+ assert.equal(forbidden.message,'GitHub search HTTP 403');
+});
+test('GitHub search remains authenticated only when caller explicitly supplies a token',async()=>{
+ const {searchPublicGitHub}=await import('../packages/ingestion/targeted.mjs');
+ let sent;
+ await searchPublicGitHub('Deno worker unref',{
+  token:'provided-in-test',
+  fetcher:async(_url,opts)=>{sent=opts.headers.Authorization;return {ok:true,json:async()=>({items:[]})};}
+ });
+ assert.equal(sent,'Bearer provided-in-test');
+});
