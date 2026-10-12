@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {createPool} from '../storage/postgres.mjs';
 import {runDiscoveryCycle} from './discovery-cycle.mjs';
 
-export const RECURRENCE_PLANNER_VERSION='source-recurrence-probes-v1';
+export const RECURRENCE_PLANNER_VERSION='source-recurrence-probes-v2';
 export const CURRENT_SEED_PROBLEMS_SQL=`
 WITH ranked AS (
  SELECT md.observation_id,md.status,md.statement,md.source_content_hash,
@@ -59,15 +59,15 @@ export function buildRecurrenceQueries(seed,{maxQueries=2}={}){
  if(!Number.isInteger(maxQueries)||maxQueries<1||maxQueries>3)throw RangeError('Invalid query count');
  const title=tokens(seed.title),statement=tokens(seed.statement);
  const ids=codeIdentifiers(seed.title+' '+seed.statement);
- const tech=[...title,...statement].find(x=>/deno|node|bun|next|turbopack|postgres|react|webpack|javascript|typescript|v8|tls|csv/i.test(x))||title[0];
- const strongTitle=title.filter(t=>t.length>=5||/[A-Z].*[A-Z]|[-_:/.]/.test(t));
- const primary=(strongTitle.length>=2?strongTitle:statement).slice(0,4).join(' ');
- const second=ids.length?uniqueQueries([
-  [ids[0],...statement.filter(t=>t.toLowerCase()!==ids[0].toLowerCase()).slice(0,3)].join(' '),
-  [ids[0],tech,...title.slice(1,3)].join(' ')
- ],1)[0]:[tech,...statement.filter(t=>t.toLowerCase()!==String(tech).toLowerCase()).slice(0,4)].join(' ');
- const third=[...statement].slice(0,5).join(' ');
- return uniqueQueries([primary,second,third],maxQueries);
+ const tech=[...title,...statement].find(x=>/^(?:deno|node(?:\\.js)?|bun|next(?:\\.js)?|turbopack|postgres(?:ql)?|react|webpack|javascript|typescript|v8|tls|csv)$/i.test(x));
+ const acronym=title.filter(x=>/[A-Z]{2,}|[a-z][A-Z]|[-_:/.]/.test(x));
+ const symptoms=title.filter(x=>/^(?:hangs?|stalls?|crashes?|fails?|broken|unreffed|ignored|missing|leaks?|regression|deadlock|timeout|slow|frozen|drops?|lost|aborts?)$/i.test(x));
+ const distinctive=title.filter(x=>x.length>=5&&!/^(?:until|despite|after|before|since|while|during|working|using|client|process|without|cannot|across|through)$/i.test(x));
+ const uniq=(items)=>[...new Map(items.filter(Boolean).map(x=>[x.toLowerCase(),x])).values()];
+ const primary=uniq([tech,...ids.slice(0,1),...acronym,...symptoms,...distinctive,...statement]).slice(0,7).join(' ');
+ const secondary=uniq([...ids.slice(0,1),tech,...statement.filter(x=>x.length>=5),...symptoms,...title]).slice(0,6).join(' ');
+ const third=uniq([tech,...title,...statement]).slice(0,7).join(' ');
+ return uniqueQueries([primary,secondary,third],maxQueries);
 }
 export async function loadVerifiedSeeds(pool,{observationIds=[],maxSeeds=3}={}){
  if(!Array.isArray(observationIds)||observationIds.length>8||observationIds.some(id=>typeof id!=='string'||!/^(github|hackernews):/.test(id)))throw Error('Invalid seed IDs');
