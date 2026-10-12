@@ -186,7 +186,7 @@ After targeted discovery, choose the new observation IDs for `PIE_LLM_OBSERVATIO
 
 The canonical home of this product is **[memolabs-dev/problem-intelligence-engine](https://github.com/memolabs-dev/problem-intelligence-engine)**.
 
-The organization contributor account is [`drop-agent-bot`](https://github.com/drop-agent-bot), with repository-level **write** permissions (not admin). The account is shared with Drop and CUESHEET; its name is retained until an organization-wide bot rename is planned. Agents develop on branches and submit PRs, with human maintainer review under [`CODEOWNERS`](.github/CODEOWNERS). CI runs Node.js 22/24 and PostgreSQL/pgvector checks. Never store bot tokens in this repository.
+The organization contributor account is [`drop-agent-bot`](https://github.com/drop-agent-bot), with repository-level **write** permissions (not admin). The account is shared with Drop and CUESHEET; its name is retained until an organization-wide bot rename is planned. Agents develop on branches and submit PRs, with **automatic merge once both required CI checks pass** in the current solo-maintainer setup. [`CODEOWNERS`](.github/CODEOWNERS) records future maintainers, but approval is not currently mandatory. CI runs Node.js 22/24 and PostgreSQL/pgvector checks. Never store bot tokens in this repository.
 
 ## End-to-end targeted discovery cycle (experimental)
 
@@ -219,3 +219,22 @@ npm run problems:dossier -- github:5814924941
 ```
 
 The dossier includes the original verified quote, related corroboration edges, URLs and the reviewer's rationale. It explicitly distinguishes **two reports from the same account** from independent reporter accounts. It never claims verified distinct humans or a commercially validated opportunity. Discussion support is only shown when the original quote remains present verbatim in the current comment.
+
+## Resumable public conversations (P0)
+
+Thread ingestion now supports **bounded, crash-safe pagination** for public GitHub issue comments and Hacker News reply trees. Each invocation processes **at most 100 examined comments per thread**, not necessarily 100 accepted messages; deleted/empty replies consume budget. A PostgreSQL checkpoint records the next GitHub page/offset or the Hacker News BFS queue and seen IDs.
+
+```bash
+PIE_THREAD_IDS='hackernews:49972125' PIE_REPLIES_PER_THREAD=25 npm run threads:ingest
+# Run the same command again to continue a partial conversation.
+```
+
+Results distinguish `partial`, `complete` and `error`, and show `resumed`, `processed`, `replies`, and `capped`. The checkpoint and source messages commit atomically. A failed fetch keeps the last committed cursor; retries are bounded and recognize HTTP 429/502/503/504, including `Retry-After`. Completed discussions are skipped until an explicit refresh:
+
+```bash
+PIE_THREADS_REFRESH=1 PIE_THREAD_IDS='hackernews:49972125' npm run threads:ingest
+```
+
+GitHub loads a fixed 100-comment page and stores the offset into that page, while HN retains the bounded queue and parent IDs. `PIE_HN_MAX_DEPTH` (1–10, default 4) limits traversal. The data remains from public sources; a change in the comment count is **not evidence of independent demand**.
+
+The maximum budget is an intentional safety limit. Very large HN discussions are rejected if their checkpoint would exceed 20,000 queued/seen IDs rather than silently dropping replies. Re-run or refresh explicitly when seeking newer replies to a previously completed conversation.

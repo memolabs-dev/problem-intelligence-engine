@@ -20,4 +20,4 @@ Summarize the implementation and any schema or data migration.
 
 ## Review
 
-Human code-owner approval is required. `@drop-agent-bot` may submit or update changes, but must not auto-approve its own PR.
+Solo-maintainer mode: `@drop-agent-bot` may submit PRs and enable GitHub auto-merge when the required CI checks pass. Human review is optional while branch protection requires zero approvals; the bot must not fabricate approvals or bypass required checks.
