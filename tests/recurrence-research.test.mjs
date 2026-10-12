@@ -88,3 +88,19 @@ test('saved recurrence audit contains source provenance, not fabricated human va
  assert.equal(saved.knownSourceAccounts,1);
  assert.equal(saved.independentlyVerifiedPeople,undefined);
 });
+
+test('search query retains specific failure and network protocol identifiers instead of generic prose',()=>{
+ const queries=buildRecurrenceQueries({id:'github:hang',title:'Bun HTTP client hangs until abort despite ACKed inbound TLS data',statement:'Bun HTTP client hangs on keep-alive TLS connections after inbound data is acknowledged'},{maxQueries:2});
+ assert.match(queries[0],/Bun/);
+ assert.match(queries[0],/TLS/);
+ assert.match(queries[0],/ACKed/);
+ assert.match(queries[0],/hangs/);
+ assert.doesNotMatch(queries[0],/until|despite/);
+ assert.ok(queries.every(x=>x.length<=130));
+});
+test('query generation preserves platform from source statement even if missing in title',()=>{
+ const queries=buildRecurrenceQueries({id:'github:worker',title:'Web workers cannot be unreffed',statement:'Web workers in Deno cannot be unreffed and block the event loop from exiting'},{maxQueries:2});
+ assert.match(queries[0],/Deno/);
+ assert.match(queries[0],/unreffed/);
+ assert.notEqual(queries[0],queries[1]);
+});
