@@ -11,6 +11,8 @@ export async function ingestSources(client, { github = [], hackerNewsIds = [], f
   }
   if (hackerNewsIds.length) observations.push(...await fetchHackerNews(hackerNewsIds, { fetcher }));
   const unique = [...new Map(observations.map(observation => [observation.id, observation])).values()];
-  await persistObservations(client, unique);
+  const connection = typeof client.connect === 'function' ? await client.connect() : client;
+  try { await persistObservations(connection, unique); }
+  finally { if (connection !== client) connection.release(); }
   return { fetched: observations.length, unique: unique.length };
 }
