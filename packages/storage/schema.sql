@@ -142,3 +142,18 @@ CREATE TABLE IF NOT EXISTS conversation_ingestion_state (
 );
 CREATE INDEX IF NOT EXISTS conversation_ingestion_state_status_idx
  ON conversation_ingestion_state(status,updated_at);
+
+-- Research probes link a verified problem's source revision to public search
+-- runs; suggestions are evidence leads, not validated corroboration.
+CREATE TABLE IF NOT EXISTS recurrence_probe_runs (
+ id UUID PRIMARY KEY,
+ seed_observation_id TEXT NOT NULL REFERENCES observations(id) ON DELETE RESTRICT,
+ seed_content_hash CHAR(64) NOT NULL,
+ query TEXT NOT NULL,
+ planner_version TEXT NOT NULL,
+ status TEXT NOT NULL CHECK (status IN ('completed','partial','error')),
+ search_run_id UUID REFERENCES targeted_search_runs(id) ON DELETE SET NULL,
+ result_summary JSONB NOT NULL DEFAULT '{}'::jsonb,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS recurrence_probe_runs_seed_idx ON recurrence_probe_runs(seed_observation_id,created_at DESC);
