@@ -12,6 +12,7 @@ test('rejects same-story comments, previously reviewed current snapshots, and ca
  assert.ok(result.sameThreadSkipped>=1);
  assert.equal(result.alreadyReviewedSkipped,1);
  assert.equal(result.selected.length,2);
+ assert.equal(result.selected[0].left.runId,'run-'+result.selected[0].left.id);
  assert.ok(!result.selected.some(x=>x.left.id==='a'&&x.right.id==='b'));
  assert.ok(result.selected.every(x=>x.semanticEquivalence==='unreviewed'));
  assert.ok(result.selected.every(x=>x.independentlyVerifiedHumans===null));

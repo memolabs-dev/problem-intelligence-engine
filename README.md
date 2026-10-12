@@ -397,3 +397,17 @@ PIE_ALTERNATE_EMBED_MODEL=nomic-embed-text \
 ```
 
 This is a **development candidate-mining** tool, not a corroboration verdict. It loads only latest source-current, model-screened problems, computes alternative embeddings **in memory only** using localhost Ollama, and ranks previously unreviewed pairs from different original conversations. It excludes current-snapshot pairs already semantically decided, caps each source's exposure and reports source URLs for manual inspection. It neither writes vectors to production pgvector nor sends any candidate to a semantic or paid model. The optional JSON report is private, refuses overwrites and never exposes account hashes. Similarity scores are not comparable between embedding models without calibration. Mined pairs must **not** be inserted into a frozen independent holdout without a fresh sampling protocol and leakage review.
+
+### P0: audited semantic review of alternative-embedding leads
+
+Local retrieval from `research:alternate-pairs` produces **unreviewed** source pairs. To verify a bounded subset, first freeze the source report privately and run:
+
+```bash
+PIE_ALTERNATE_REVIEW_LIMIT=6 \
+PIE_ALTERNATE_REVIEW_REPORT_PATH=/tmp/pie-reviewed-leads.json \
+  npm run research:review-alternate -- /tmp/pie-alternate-pairs.json
+```
+
+The reviewer uses the configured, approved **free OpenRouter Nemotron** model and the current canonical semantic policy, regardless of which *local* embedding model retrieved the leads. Every source is looked up against its latest source-content hash and evidence-grounded extraction, and rechecked after the remote reviewer responds. Stale or same-discussion pairs are rejected. Existing verdicts are reused, while new same/different/uncertain decisions are persisted in `corroboration_edges` with source run IDs and policy version. Failures remain explicit errors, not semantic negatives. The private report is created without overwriting a previous report. This does **not** annotate the independent human holdout or assert independent people, precision, buyer interest or market demand.
+
+**Snapshot binding:** newly mined leads carry the exact source extraction `runId` for each endpoint. The semantic reviewer rejects legacy reports without these run IDs, as well as proposals whose source was re-extracted since mining. Re-run `research:alternate-pairs` when upgrading the workflow or when sources change; never treat a stale similarity score as evidence.
