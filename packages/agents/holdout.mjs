@@ -22,9 +22,9 @@ WITH ranked AS (
  ORDER BY md5(m.observation_id || $2) LIMIT $1
 )
 SELECT a.id AS left_id,a.title AS left_title,a.body AS left_body,a.source AS left_source,a.url AS left_url,
- a.reporter_key AS left_account,a.content_hash AS left_hash,
+ a.reporter_key AS left_account,a.thread_root_id AS left_thread_root,a.content_hash AS left_hash,
  b.id AS right_id,b.title AS right_title,b.body AS right_body,b.source AS right_source,b.url AS right_url,
- b.reporter_key AS right_account,b.content_hash AS right_hash,
+ b.reporter_key AS right_account,b.thread_root_id AS right_thread_root,b.content_hash AS right_hash,
  1-(a.embedding <=> b.embedding) AS similarity
 FROM current a JOIN current b ON a.id<b.id
 WHERE COALESCE(a.thread_root_id,a.id)<>COALESCE(b.thread_root_id,b.id)
@@ -71,14 +71,16 @@ function validateSourceRow(row){
  return Number.isFinite(Number(row.similarity));
 }
 function sortedKey(row){return [row.left_id,row.right_id].sort().join('|');}
+function originalThread(row,side){return row[side+'_thread_root']||row[side+'_id'];}
 export function sampleBlindPairs(rows,{target=150,seed='pie-holdout-v2',devIds=[],reviewedPairs=[]}={}){
  if(!Array.isArray(rows)||!Number.isInteger(target)||target<1||target>1000||typeof seed!=='string'||!seed.trim())throw Error('Invalid holdout sampling options');
  if(!Array.isArray(reviewedPairs))throw Error('Invalid prior-reviewed pair exclusions');
  const reviewed=new Set(reviewedPairs.map(p=>typeof p==='string'?p:(Array.isArray(p)?p:[p?.left,p?.right]).sort().join('|')));
- const dev=new Set(devIds),rejected={developerOverlap:0,previouslyJudged:0,invalid:0,duplicate:0};
+ const dev=new Set(devIds),rejected={developerOverlap:0,previouslyJudged:0,sameOriginalThread:0,invalid:0,duplicate:0};
  const candidates=[],seen=new Set();
  for(const row of rows){
   if(!validateSourceRow(row)){rejected.invalid++;continue;}
+  if(originalThread(row,'left')===originalThread(row,'right')){rejected.sameOriginalThread++;continue;}
   if(dev.has(row.left_id)||dev.has(row.right_id)){rejected.developerOverlap++;continue;}
   const key=sortedKey(row);
   if(reviewed.has(key)){rejected.previouslyJudged++;continue;}
@@ -144,7 +146,8 @@ export function sampleBlindPairs(rows,{target=150,seed='pie-holdout-v2',devIds=[
    highSimilarityCandidateCount:selected.filter(row=>Number(row.similarity)>=0.60).length,
    mediumSimilarityCandidateCount:selected.filter(row=>Number(row.similarity)>=0.35&&Number(row.similarity)<0.60).length,
    maxSourceExposure:Math.max(0,...sourceExposure.values()),
-   selections:selected.map((row,index)=>({pairId:pairs[index].pairId,bucket:row.bucket,challengeBand:row.challengeBand,similarity:Number(row.similarity)})),
+   selections:selected.map((row,index)=>({pairId:pairs[index].pairId,bucket:row.bucket,challengeBand:row.challengeBand,similarity:Number(row.similarity),
+    leftOriginalThread:originalThread(row,'left'),rightOriginalThread:originalThread(row,'right')})),
    developmentExamplesExcluded:dev.size,leakagePolicy:'exclude_all_previous_semantic_model_reviewed_pairs',
    note:'Difficulty prioritization is candidate mining, not labels or evidence of positive cases. This is not an independently validated benchmark.'}
  };

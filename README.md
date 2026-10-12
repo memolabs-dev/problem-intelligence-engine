@@ -347,3 +347,7 @@ The optional third provider is bounded to 1–40 results and a maximum 10-year l
 Each comment is stored as an observation with an exact source URL, the original HTML source text, a pseudonymous **account key**, and a **`thread_root_id` pointing to the HN story**. Two comments in the same thread are *not two independent discussions*, even when they were posted by different accounts. The evidence graph, semantic clusters, dossiers, and blinded holdout all respect this root; paired comments from one thread are excluded from the cross-discussion holdout.
 
 Comment results are unverified until the same source-quote and semantic-review process runs. A comment that quotes another person's issue is not proof that the commenter experienced it. The standalone public search, extraction, and indexing stages remain independently auditable; comment search failures do not silently disappear from provider status.
+
+### Original discussion lineage in blind-holdout preflight
+
+The sampling audit (not the annotator-facing blind queue) now includes the **original conversation root** for each candidate source. Two Hacker News comments that belong to the same story are never an eligible independent-discussion pair, even if the comment IDs and accounts differ. Quality reports distinguish the number of raw observations from the number of distinct original source threads by platform. This protects against apparent cross-community diversity produced by many comments within the same story; it does not prove that different threads were authored by distinct humans.

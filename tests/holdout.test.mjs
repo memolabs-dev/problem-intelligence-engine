@@ -135,3 +135,12 @@ test('frozen holdout export cannot replace an existing annotation queue',async()
   assert.equal(await readFile(outputs.blind,'utf8'),content);
  }finally{await rm(folder,{recursive:true,force:true});}
 });
+
+test('sampler rejects two Hacker News comments from the same original story',()=>{
+ const row={...pair(1,2,{sourceA:'hackernews',sourceB:'hackernews'}),
+  left_id:'hackernews:101',right_id:'hackernews:102',
+  left_thread_root:'hackernews:100',right_thread_root:'hackernews:100'};
+ const result=sampleBlindPairs([row],{target:1});
+ assert.equal(result.blind.pairs.length,0);
+ assert.equal(result.manifest.filtered.sameOriginalThread,1);
+});
