@@ -12,7 +12,7 @@ WITH ranked AS (
  FROM model_decisions md JOIN model_runs r ON md.run_id=r.id
 ), current AS (
  SELECT m.run_id,m.observation_id,m.statement,m.excerpt,
-        o.source,o.url,o.reporter_key,e.embedding
+        o.source,o.url,o.reporter_key,o.thread_root_id,e.embedding
  FROM ranked m JOIN observations o ON o.id=m.observation_id
  JOIN problem_embeddings e ON e.run_id=m.run_id AND e.observation_id=m.observation_id
  WHERE m.rn=1 AND m.status='found' AND m.source_content_hash=o.content_hash AND e.embedding_model=$1
@@ -20,13 +20,13 @@ WITH ranked AS (
 `;
 export const CURRENT_EMBEDDED_NODES_SQL=RANKED_CANDIDATES+`
 SELECT run_id AS "runId", observation_id AS id, statement, source, url,
-       reporter_key AS "accountKey"
+       reporter_key AS "accountKey",thread_root_id AS "threadRootId"
 FROM current ORDER BY observation_id`;
 export const NEAREST_PAIRS_SQL=RANKED_CANDIDATES+`
 SELECT a.run_id AS left_run,a.observation_id AS left_id,a.statement AS left_statement,
- a.excerpt AS left_excerpt,a.source AS left_source,a.url AS left_url,a.reporter_key AS left_account,
+ a.excerpt AS left_excerpt,a.source AS left_source,a.url AS left_url,a.reporter_key AS left_account,a.thread_root_id AS left_thread_root,
  b.run_id AS right_run,b.observation_id AS right_id,b.statement AS right_statement,
- b.excerpt AS right_excerpt,b.source AS right_source,b.url AS right_url,b.reporter_key AS right_account,
+ b.excerpt AS right_excerpt,b.source AS right_source,b.url AS right_url,b.reporter_key AS right_account,b.thread_root_id AS right_thread_root,
  1-(a.embedding <=> b.embedding) AS similarity
 FROM current a JOIN current b ON a.observation_id < b.observation_id
 WHERE 1-(a.embedding <=> b.embedding)>=$2
@@ -82,7 +82,7 @@ export function compileCorroborationGroups(pairs,edges,allNodes=[]){
  for(const pair of pairs){
   for(const [side,other] of [['left','right']]){
    const id=pair[side+'_id'];
-   if(!nodes.has(id))nodes.set(id,{id,runId:pair[side+'_run'],statement:pair[side+'_statement'],source:pair[side+'_source'],url:pair[side+'_url'],accountKey:pair[side+'_account']||null});
+   if(!nodes.has(id))nodes.set(id,{id,runId:pair[side+'_run'],statement:pair[side+'_statement'],source:pair[side+'_source'],url:pair[side+'_url'],accountKey:pair[side+'_account']||null,threadRootId:pair[side+'_thread_root']||id});
   }
  }
  const same=new Set(edges.filter(e=>e.verdict==='same_problem').map(e=>[e.left_id,e.right_id].sort().join('|')));
@@ -96,9 +96,10 @@ export function compileCorroborationGroups(pairs,edges,allNodes=[]){
   const accounts=members.map(m=>m.accountKey);
   const allKnown=accounts.every(Boolean);
   const distinct=allKnown?new Set(accounts).size:null;
-  return {group:index+1,observationCount:members.length,
+  const distinctDiscussions=new Set(members.map(m=>m.threadRootId||m.id)).size;
+  return {group:index+1,observationCount:members.length,distinctDiscussionCount:distinctDiscussions,
    distinctAccountCount:distinct,independentHumanCount:null,
-   corroboration:members.length===1?'single_observation':distinct!=null&&distinct>1?'multiple_distinct_accounts_unverified_independence':'multiple_observations_independence_unknown',
+   corroboration:members.length===1?'single_observation':distinctDiscussions===1?'multiple_observations_single_discussion':distinct!=null&&distinct>1?'multiple_distinct_accounts_unverified_independence':'multiple_observations_independence_unknown',
    marketValidation:'unknown',
    members:members.map(m=>({observationId:m.id,statement:m.statement,source:m.source,url:m.url}))
   };

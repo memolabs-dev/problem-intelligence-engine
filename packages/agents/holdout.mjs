@@ -15,7 +15,7 @@ WITH ranked AS (
         row_number() OVER(PARTITION BY md.observation_id ORDER BY run.started_at DESC,run.id DESC) AS rn
  FROM model_decisions md JOIN model_runs run ON run.id=md.run_id
 ), current AS (
- SELECT m.observation_id AS id,o.title,o.body,o.url,o.source,o.reporter_key,o.content_hash,e.embedding
+ SELECT m.observation_id AS id,o.title,o.body,o.url,o.source,o.reporter_key,o.thread_root_id,o.content_hash,e.embedding
  FROM ranked m JOIN observations o ON o.id=m.observation_id
  JOIN problem_embeddings e ON e.run_id=m.run_id AND e.observation_id=m.observation_id
  WHERE m.rn=1 AND m.status='found' AND m.source_content_hash=o.content_hash AND e.embedding_model=$3
@@ -27,7 +27,8 @@ SELECT a.id AS left_id,a.title AS left_title,a.body AS left_body,a.source AS lef
  b.reporter_key AS right_account,b.content_hash AS right_hash,
  1-(a.embedding <=> b.embedding) AS similarity
 FROM current a JOIN current b ON a.id<b.id
-WHERE NOT EXISTS (
+WHERE COALESCE(a.thread_root_id,a.id)<>COALESCE(b.thread_root_id,b.id)
+AND NOT EXISTS (
  SELECT 1 FROM corroboration_edges previously_reviewed
  WHERE (previously_reviewed.left_observation=a.id AND previously_reviewed.right_observation=b.id)
     OR (previously_reviewed.left_observation=b.id AND previously_reviewed.right_observation=a.id)

@@ -157,3 +157,10 @@ CREATE TABLE IF NOT EXISTS recurrence_probe_runs (
  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS recurrence_probe_runs_seed_idx ON recurrence_probe_runs(seed_observation_id,created_at DESC);
+
+-- HN comments may be independent observations yet belong to the same story.
+-- The original thread root is a reporting unit; multiple comments in one
+-- thread are NOT independent public discussions.
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS thread_root_id TEXT;
+CREATE INDEX IF NOT EXISTS observations_thread_root_idx ON observations(thread_root_id);
+ALTER TABLE targeted_search_runs ADD COLUMN IF NOT EXISTS hackernews_comments_status TEXT NOT NULL DEFAULT 'not_run';
