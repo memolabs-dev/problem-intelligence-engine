@@ -127,3 +127,18 @@ CREATE TABLE IF NOT EXISTS targeted_search_hits (
  PRIMARY KEY(run_id,observation_id)
 );
 CREATE INDEX IF NOT EXISTS targeted_search_hits_observation_idx ON targeted_search_hits(observation_id);
+
+-- A checkpoint belongs to one root discussion and is updated atomically with
+-- its messages. A partial/error state resumes at the same cursor; complete
+-- threads are skipped unless an explicit refresh is requested.
+CREATE TABLE IF NOT EXISTS conversation_ingestion_state (
+ observation_id TEXT PRIMARY KEY REFERENCES observations(id) ON DELETE CASCADE,
+ source TEXT NOT NULL CHECK (source IN ('github','hackernews')),
+ cursor JSONB,
+ status TEXT NOT NULL CHECK (status IN ('partial','complete','error')),
+ processed_count BIGINT NOT NULL DEFAULT 0 CHECK (processed_count>=0),
+ last_error TEXT,
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS conversation_ingestion_state_status_idx
+ ON conversation_ingestion_state(status,updated_at);
