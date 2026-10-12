@@ -7,6 +7,7 @@ export const DEFAULT_QUALITY_POLICY=Object.freeze({
  minimumHighSimilarity:12,
  minimumMediumSimilarity:25,
  minimumCrossPlatform:15,
+ minimumDistinctMinorityPlatformRoots:8,
  maximumSourceShare:0.30
 });
 const ALLOWED_BANDS=new Set(['near_miss_candidate','ambiguous_candidate','contextual_candidate','easy_negative_candidate']);
@@ -49,7 +50,17 @@ export function assessHoldoutQuality(blind,audit,{policy=DEFAULT_QUALITY_POLICY}
  const n=blind.pairs.length;
  const high=audit.selections.filter(x=>Number(x.similarity)>=0.60).length;
  const medium=audit.selections.filter(x=>Number(x.similarity)>=0.35&&Number(x.similarity)<0.60).length;
- const cross=blind.pairs.filter(x=>x.left.source!==x.right.source).length;
+ const crossPairs=blind.pairs.filter(x=>x.left.source!==x.right.source);
+ const cross=crossPairs.length;
+ const crossPlatformRoots=new Map();
+ for(const pair of crossPairs){
+  for(const item of [pair.left,pair.right]){
+   if(!crossPlatformRoots.has(item.source))crossPlatformRoots.set(item.source,new Set());
+   crossPlatformRoots.get(item.source).add(item.observationId);
+  }
+ }
+ const distinctCrossPlatformRoots=Object.fromEntries([...crossPlatformRoots].map(([source,ids])=>[source,ids.size]));
+ const minorityCrossPlatformRoots=crossPlatformRoots.size>=2?Math.min(...[...crossPlatformRoots.values()].map(ids=>ids.size)):0;
  const exposures=sourceRoots(blind.pairs);
  const maxExposure=Math.max(0,...exposures);
  const exposureShare=n?maxExposure/n:0;
@@ -57,6 +68,7 @@ export function assessHoldoutQuality(blind,audit,{policy=DEFAULT_QUALITY_POLICY}
  if(high<policy.minimumHighSimilarity)warnings.push('too_few_high_similarity_candidates');
  if(medium<policy.minimumMediumSimilarity)warnings.push('too_few_medium_similarity_candidates');
  if(cross<policy.minimumCrossPlatform)warnings.push('too_few_cross_platform_pairs');
+ if(minorityCrossPlatformRoots<(policy.minimumDistinctMinorityPlatformRoots??0))warnings.push('too_few_distinct_cross_platform_observations');
  if(exposureShare>policy.maximumSourceShare)warnings.push('source_concentration_too_high');
  // Zero exclusions can be legitimate for a fresh pool; do not mark it unsafe
  // without evidence that previously judged examples were actually included.
@@ -66,7 +78,9 @@ export function assessHoldoutQuality(blind,audit,{policy=DEFAULT_QUALITY_POLICY}
   independentValidationAchieved:false,
   modelAccuracyEstablished:false,
   counts:{target:audit.target,pairs:n,highSimilarityCandidates:high,mediumSimilarityCandidates:medium,
-   crossPlatformPairs:cross,uniqueObservationRoots:exposures.length,maxSourceExposure:maxExposure,
+   crossPlatformPairs:cross,distinctCrossPlatformRootsByPlatform:distinctCrossPlatformRoots,
+   minorityCrossPlatformObservationCount:minorityCrossPlatformRoots,
+   uniqueObservationRoots:exposures.length,maxSourceExposure:maxExposure,
    maxSourceExposureShare:Number(exposureShare.toFixed(3)),previousModelReviewExclusions:audit.filtered?.previouslyJudged??null,
    developerOverlapExclusions:audit.filtered?.developerOverlap??null},
   blockers:[...new Set([...errors,...warnings])],

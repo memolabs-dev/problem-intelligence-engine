@@ -68,3 +68,16 @@ test('Hacker News reply without a title remains valid when its body is present',
  assert.notEqual(assessment.status,'invalid');
  assert.ok(!assessment.blockers.includes('missing_source_content'));
 });
+
+test('cross-platform pair counts need multiple distinct source observations',()=>{
+ const rows=Array.from({length:35},(_,i)=>pair(i+500,200+i%3,0.73));
+ const {blind,manifest}=sampleBlindPairs(rows,{target:35});
+ const report=assessHoldoutQuality(blind,manifest,{policy:{
+  minimumPairs:1,minimumHighSimilarity:0,minimumMediumSimilarity:0,
+  minimumCrossPlatform:1,minimumDistinctMinorityPlatformRoots:8,maximumSourceShare:1
+ }});
+ assert.equal(report.counts.crossPlatformPairs,35);
+ assert.equal(report.counts.distinctCrossPlatformRootsByPlatform.hackernews,3);
+ assert.equal(report.counts.minorityCrossPlatformObservationCount,3);
+ assert.ok(report.blockers.includes('too_few_distinct_cross_platform_observations'));
+});

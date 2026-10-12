@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {createPool} from '../storage/postgres.mjs';
 import {runDiscoveryCycle} from './discovery-cycle.mjs';
 
-export const RECURRENCE_PLANNER_VERSION='source-recurrence-probes-v2';
+export const RECURRENCE_PLANNER_VERSION='source-recurrence-probes-v3';
 export const CURRENT_SEED_PROBLEMS_SQL=`
 WITH ranked AS (
  SELECT md.observation_id,md.status,md.statement,md.source_content_hash,
@@ -29,7 +29,7 @@ files file path version project new old command output method function
 function tokens(input){
  const matches=String(input||'').match(/[\p{L}\p{N}][\p{L}\p{N}_:./-]*/gu)||[];
  const seen=new Set();
- return matches.map(x=>x.replace(/^[./-]+|[./-]+$/g,''))
+ return matches.map(x=>x.replace(/^[./:-]+|[./:-]+$/g,''))
    .filter(x=>x.length>=3&&x.length<=55&&!STOPWORDS.has(x.toLowerCase())&&!/^\d+(?:\.\d+)*$/.test(x))
    .filter(x=>{const k=x.toLowerCase();if(seen.has(k))return false;seen.add(k);return true;});
 }
@@ -59,15 +59,19 @@ export function buildRecurrenceQueries(seed,{maxQueries=2}={}){
  if(!Number.isInteger(maxQueries)||maxQueries<1||maxQueries>3)throw RangeError('Invalid query count');
  const title=tokens(seed.title),statement=tokens(seed.statement);
  const ids=codeIdentifiers(seed.title+' '+seed.statement);
- const tech=[...title,...statement].find(x=>/^(?:deno|node(?:\\.js)?|bun|next(?:\\.js)?|turbopack|postgres(?:ql)?|react|webpack|javascript|typescript|v8|tls|csv)$/i.test(x));
- const acronym=title.filter(x=>/[A-Z]{2,}|[a-z][A-Z]|[-_:/.]/.test(x));
- const symptoms=title.filter(x=>/^(?:hangs?|stalls?|crashes?|fails?|broken|unreffed|ignored|missing|leaks?|regression|deadlock|timeout|slow|frozen|drops?|lost|aborts?)$/i.test(x));
- const distinctive=title.filter(x=>x.length>=5&&!/^(?:until|despite|after|before|since|while|during|working|using|client|process|without|cannot|across|through)$/i.test(x));
- const uniq=(items)=>[...new Map(items.filter(Boolean).map(x=>[x.toLowerCase(),x])).values()];
- const primary=uniq([tech,...ids.slice(0,1),...acronym,...symptoms,...distinctive,...statement]).slice(0,7).join(' ');
- const secondary=uniq([...ids.slice(0,1),tech,...statement.filter(x=>x.length>=5),...symptoms,...title]).slice(0,6).join(' ');
- const third=uniq([tech,...title,...statement]).slice(0,7).join(' ');
- return uniqueQueries([primary,secondary,third],maxQueries);
+ const tech=[...title,...statement].find(x=>/^(?:deno|node(?:\\.js)?|bun|next\\.js|turbopack|postgres(?:ql)?|react|webpack|javascript|typescript|v8|csv)$/i.test(x));
+ const identifier=ids.find(x=>/[a-z][A-Z]|[_.:/-]/.test(x))||null;
+ const protocol=title.find(x=>/^(?:tls|ssl|tcp|udp|oauth|utf-?8|utf-?16|websocket)$/i.test(x)) || title.find(x=>/^(?:https?|ack(?:ed)?)$/i.test(x));
+ const symptom=title.find(x=>/^(?:hangs?|stalls?|crashes?|fails?|broken|unreffed|ignores?|ignored|missing|leaks?|regression|deadlock|timeout|slow|frozen|drops?|lost|aborts?)$/i.test(x));
+ const secondarySignal=title.find(x=>/^(?:acked|acknowledged|keep-alive|websocket)$/i.test(x)&&x!==protocol) || title.find(x=>/[A-Z]{2,}|[a-z][A-Z]/.test(x)&&x!==protocol&&x!==tech&&x!==identifier);
+ const fallback=title.find(x=>x.length>=5&&!/^(?:until|despite|after|before|since|while|during|working|using|client|process|without|cannot|across|through)$/i.test(x));
+ const uniq=items=>[...new Map(items.filter(Boolean).map(x=>[x.toLowerCase(),x])).values()];
+ // GitHub issue search ANDs each term. More keywords can REMOVE the actual
+ // recurrence; keep each search at 2–4 discriminative anchors, not long prose.
+ const primary=uniq([tech,identifier,protocol,secondarySignal,symptom,fallback,...statement]).slice(0,4).join(' ');
+ const alternate=uniq([tech,identifier,protocol,symptom,fallback,...statement]).slice(0,3).join(' ');
+ const semantic=uniq([tech,identifier,...statement.filter(x=>x.length>5),symptom,...title]).slice(0,3).join(' ');
+ return uniqueQueries([primary,alternate,semantic],maxQueries);
 }
 export async function loadVerifiedSeeds(pool,{observationIds=[],maxSeeds=3}={}){
  if(!Array.isArray(observationIds)||observationIds.length>8||observationIds.some(id=>typeof id!=='string'||!/^(github|hackernews):/.test(id)))throw Error('Invalid seed IDs');
