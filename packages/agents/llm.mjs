@@ -37,10 +37,10 @@ export async function extractWithLLM(observation,options={}) {
  const endpoint=options.endpoint||config.endpoint;
  if(!apiKey)throw Error('LLM API key is required; no API call was made');
  if(!endpoint.startsWith('https://'))throw Error('HTTPS endpoint required');
- const response=await fetcher(endpoint,{signal:options.signal||AbortSignal.timeout(options.timeoutMs||45000),method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model,max_tokens:options.maxTokens||800,temperature:0,response_format:{type:'json_object'},messages:[{role:'system',content:SYSTEM},{role:'user',content:JSON.stringify({title:String(observation.title||'').slice(0,1000),body:String(observation.body||'').slice(0,12000)})}]})});
+ const response=await fetcher(endpoint,{signal:options.signal||AbortSignal.timeout(options.timeoutMs||45000),method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model,max_tokens:options.maxTokens||2400,temperature:0,response_format:{type:'json_object'},messages:[{role:'system',content:SYSTEM},{role:'user',content:JSON.stringify({title:String(observation.title||'').slice(0,1000),body:String(observation.body||'').slice(0,12000)})}]})});
  if(!response.ok)throw Error(`LLM HTTP ${response.status}`);
  const data=await response.json();
  const content=data?.choices?.[0]?.message?.content;
- if(typeof content!=='string')throw Error('Missing LLM content');
+ if(typeof content!=='string'||!content.trim()){const reason=data?.choices?.[0]?.finish_reason||'unknown';throw Error(`Missing LLM content (finish_reason=${reason})`);}
  return validateExtraction(JSON.parse(content),observation);
 }
