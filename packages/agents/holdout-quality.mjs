@@ -41,11 +41,23 @@ export function assessHoldoutQuality(blind,audit,{policy=DEFAULT_QUALITY_POLICY}
   pairs.add(pairKey);
  }
  const auditIds=new Set();
+ const rootSources=new Map();
+ let rootsMissingFromAudit=0;
  for(const selection of audit.selections){
   if(!validId(selection?.pairId)||auditIds.has(selection.pairId)||!seen.has(selection.pairId))errors.push('audit_pair_mismatch');
   auditIds.add(selection.pairId);
   if(!Number.isFinite(Number(selection.similarity))||Number(selection.similarity)<-1||Number(selection.similarity)>1)errors.push('invalid_similarity');
   if(!ALLOWED_BANDS.has(selection.challengeBand))errors.push('invalid_challenge_band');
+  const pair=blind.pairs.find(x=>x.pairId===selection.pairId);
+  if(!pair)continue;
+  if(!selection.leftOriginalThread||!selection.rightOriginalThread){rootsMissingFromAudit++;continue;}
+  if(selection.leftOriginalThread===selection.rightOriginalThread)errors.push('same_original_thread_pair');
+  for(const side of ['left','right']){
+   const root=selection[side+'OriginalThread'];
+   const source=pair[side].source;
+   if(!rootSources.has(source))rootSources.set(source,new Set());
+   rootSources.get(source).add(root);
+  }
  }
  const n=blind.pairs.length;
  const high=audit.selections.filter(x=>Number(x.similarity)>=0.60).length;
@@ -61,6 +73,18 @@ export function assessHoldoutQuality(blind,audit,{policy=DEFAULT_QUALITY_POLICY}
  }
  const distinctCrossPlatformRoots=Object.fromEntries([...crossPlatformRoots].map(([source,ids])=>[source,ids.size]));
  const minorityCrossPlatformRoots=crossPlatformRoots.size>=2?Math.min(...[...crossPlatformRoots.values()].map(ids=>ids.size)):0;
+ const crossThreadRoots=new Map();
+ for(const selection of audit.selections){
+  const pair=blind.pairs.find(x=>x.pairId===selection.pairId);
+  if(!pair||pair.left.source===pair.right.source)continue;
+  for(const side of ['left','right']){
+   const root=selection[side+'OriginalThread']||pair[side].observationId;
+   if(!crossThreadRoots.has(pair[side].source))crossThreadRoots.set(pair[side].source,new Set());
+   crossThreadRoots.get(pair[side].source).add(root);
+  }
+ }
+ const distinctCrossPlatformThreads=Object.fromEntries([...crossThreadRoots].map(([platform,roots])=>[platform,roots.size]));
+ const minorityCrossPlatformThreads=crossThreadRoots.size>=2?Math.min(...[...crossThreadRoots.values()].map(roots=>roots.size)):0;
  const exposures=sourceRoots(blind.pairs);
  const maxExposure=Math.max(0,...exposures);
  const exposureShare=n?maxExposure/n:0;
@@ -69,6 +93,8 @@ export function assessHoldoutQuality(blind,audit,{policy=DEFAULT_QUALITY_POLICY}
  if(medium<policy.minimumMediumSimilarity)warnings.push('too_few_medium_similarity_candidates');
  if(cross<policy.minimumCrossPlatform)warnings.push('too_few_cross_platform_pairs');
  if(minorityCrossPlatformRoots<(policy.minimumDistinctMinorityPlatformRoots??0))warnings.push('too_few_distinct_cross_platform_observations');
+ if(minorityCrossPlatformThreads<(policy.minimumDistinctMinorityPlatformRoots??0))warnings.push('too_few_original_cross_platform_threads');
+ if(rootsMissingFromAudit)warnings.push('missing_original_thread_audit');
  if(exposureShare>policy.maximumSourceShare)warnings.push('source_concentration_too_high');
  // Zero exclusions can be legitimate for a fresh pool; do not mark it unsafe
  // without evidence that previously judged examples were actually included.
@@ -80,6 +106,10 @@ export function assessHoldoutQuality(blind,audit,{policy=DEFAULT_QUALITY_POLICY}
   counts:{target:audit.target,pairs:n,highSimilarityCandidates:high,mediumSimilarityCandidates:medium,
    crossPlatformPairs:cross,distinctCrossPlatformRootsByPlatform:distinctCrossPlatformRoots,
    minorityCrossPlatformObservationCount:minorityCrossPlatformRoots,
+   distinctOriginalThreadsByPlatform:Object.fromEntries([...rootSources].map(([platform,roots])=>[platform,roots.size])),
+   distinctCrossPlatformOriginalThreadsByPlatform:distinctCrossPlatformThreads,
+   minorityCrossPlatformOriginalThreadCount:minorityCrossPlatformThreads,
+   pairsMissingOriginalThreadAudit:rootsMissingFromAudit,
    uniqueObservationRoots:exposures.length,maxSourceExposure:maxExposure,
    maxSourceExposureShare:Number(exposureShare.toFixed(3)),previousModelReviewExclusions:audit.filtered?.previouslyJudged??null,
    developerOverlapExclusions:audit.filtered?.developerOverlap??null},

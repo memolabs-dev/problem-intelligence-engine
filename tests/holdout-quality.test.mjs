@@ -81,3 +81,28 @@ test('cross-platform pair counts need multiple distinct source observations',()=
  assert.equal(report.counts.minorityCrossPlatformObservationCount,3);
  assert.ok(report.blockers.includes('too_few_distinct_cross_platform_observations'));
 });
+
+test('source thread audit detects three HN stories behind many different comment IDs',()=>{
+ const rows=Array.from({length:30},(_,i)=>({
+  ...pair(i+500,i+1000,0.73),
+  right_thread_root:'hackernews:story-'+(i%3)
+ }));
+ const {blind,manifest}=sampleBlindPairs(rows,{target:30});
+ const report=assessHoldoutQuality(blind,manifest,{policy:{
+  minimumPairs:1,minimumHighSimilarity:0,minimumMediumSimilarity:0,
+  minimumCrossPlatform:1,minimumDistinctMinorityPlatformRoots:8,maximumSourceShare:1
+ }});
+ assert.equal(report.counts.distinctCrossPlatformRootsByPlatform.hackernews,30);
+ assert.equal(report.counts.distinctCrossPlatformOriginalThreadsByPlatform.hackernews,3);
+ assert.ok(report.blockers.includes('too_few_original_cross_platform_threads'));
+ assert.equal(report.independentValidationAchieved,false);
+ assert.ok(!JSON.stringify(blind).includes('story-'));
+});
+
+test('tampered source audit joining a discussion to itself is invalid',()=>{
+ const {blind,manifest}=sampleBlindPairs([pair(1,2)],{target:1});
+ const altered=structuredClone(manifest);
+ altered.selections[0].rightOriginalThread=altered.selections[0].leftOriginalThread;
+ assert.equal(assessHoldoutQuality(blind,altered).status,'invalid');
+ assert.ok(assessHoldoutQuality(blind,altered).blockers.includes('same_original_thread_pair'));
+});
