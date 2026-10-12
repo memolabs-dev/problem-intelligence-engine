@@ -257,3 +257,9 @@ npm run eval:review-holdout -- /tmp/pie-holdout-blind.json \
 ```
 
 Reviewer identities are pseudonyms supplied by the user and are **not authenticated**. No performance claim is independently verified until humans are verified externally and disagreements are adjudicated. Developer-labeled observations from `eval/labels.json` are excluded by default. If fewer than 150 pairs remain, the shortfall is reported instead of silently lowering the target. More source-backed observations are needed to finish the P0 benchmark.
+
+### Hard-pair sampling and frozen holdout safety
+
+The default `eval:prepare-holdout` sampler uses a difficulty-first, provenance-diverse selection, explicitly prioritizing ambiguous semantic neighbors over easy unrelated pairs. All buckets are **unlabeled candidates**; a high embedding similarity does **not** establish a true same-problem pair. Source exposure is bounded where possible, and every pair previously sent to the semantic reviewer is excluded at the SQL level to prevent evaluation leakage.
+
+Frozen reviewer files are immutable by default: attempting to reuse an existing output prefix fails instead of overwriting annotations. Set a fresh prefix, such as `PIE_HOLDOUT_OUTPUT=/tmp/pie-holdout-v3`, for a new dataset. Sampling audits now separately report near-miss (≥0.60), ambiguous (0.35–0.60), contextual (0.15–0.35), and easy-negative candidate bands. These are prioritization categories, not model labels or precision estimates.
