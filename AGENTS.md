@@ -2,7 +2,7 @@
 
 **Product:** Problem Intelligence Engine — Memo Labs Dev
 **Canonical repository:** https://github.com/memolabs-dev/problem-intelligence-engine
-**Current organization contributor bot:** @drop-agent-bot (write access, NOT admin).
+**Current automation identity:** the `memo-labs-automation` GitHub App (`memo-labs-automation[bot]`). The former @drop-agent-bot account was retired on 2026-10-14.
 **Maintainer and human reviewer:** @guillaume-flambard.
 
 Never fabricate citations, buyers, pricing or willingness to pay. Mark unknown explicitly.
