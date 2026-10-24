@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
 import {readFile,writeFile} from 'node:fs/promises';
+import {isDeepStrictEqual} from 'node:util';
 import {parseReviewerAnnotations,evaluateIndependentReviews} from './holdout-review.mjs';
 const hash=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
 const LABELS=new Set(['same_problem','different_problem','uncertain']);
@@ -7,7 +8,8 @@ export function prepareAdjudication(blind,reviewA,reviewB){
  const a=parseReviewerAnnotations(blind,reviewA),b=parseReviewerAnnotations(blind,reviewB);
  if(a.reviewer===b.reviewer)throw Error('Distinct reviewer pseudonyms are required');
  const disputed=blind.pairs.filter(p=>a.labels.get(p.pairId)!==b.labels.get(p.pairId));
- const entries=disputed.map(p=>({pairId:p.pairId,left:p.left,right:p.right,label:null,reason:null}));
+ // Return detached copies so editing a review queue cannot mutate the original blind evidence.
+ const entries=disputed.map(p=>({pairId:p.pairId,left:structuredClone(p.left),right:structuredClone(p.right),label:null,reason:null}));
  return {kind:'human_adjudication_queue',blindDigest:hash(blind),reviewDigests:[hash(reviewA),hash(reviewB)],
   reviewerPseudonyms:[a.reviewer,b.reviewer],items:entries,
   note:'Disagreements or unanswered labels require an external human adjudicator; no labels are filled automatically.'};
@@ -17,10 +19,20 @@ export function finalizeAdjudication(blind,reviewA,reviewB,queue,{predictions=[]
  if(queue?.kind!=='human_adjudication_queue'||queue.blindDigest!==expected.blindDigest||
   JSON.stringify(queue.reviewDigests)!==JSON.stringify(expected.reviewDigests)||
   !Array.isArray(queue.items)||queue.items.length!==expected.items.length)throw Error('Adjudication does not match frozen source and reviewer submissions');
- const expectedIds=new Set(expected.items.map(x=>x.pairId)),resolved=new Map();
+ // The pair ID and outer file digests are not enough: a filled adjudication queue
+ // could keep the same ID while presenting a different excerpt to the adjudicator.
+ // Compare the whole source snapshots against the authoritative frozen blind queue.
+ const frozenById=new Map(expected.items.map(item=>[item.pairId,item]));
+ const expectedFields=['label','left','pairId','reason','right'];
+ const resolved=new Map();
  for(const item of queue.items){
-  if(!expectedIds.has(item?.pairId)||resolved.has(item.pairId)||!LABELS.has(item.label)||
-   typeof item.reason!=='string'||!item.reason.trim())throw Error('Human adjudication incomplete or invalid');
+  const frozen=frozenById.get(item?.pairId);
+  if(!frozen||resolved.has(item.pairId)||
+   !isDeepStrictEqual(Object.keys(item).sort(),expectedFields)||
+   !isDeepStrictEqual(item.left,frozen.left)||!isDeepStrictEqual(item.right,frozen.right))
+   throw Error('Adjudication source snapshot differs from frozen blind queue');
+  if(!LABELS.has(item.label)||typeof item.reason!=='string'||!item.reason.trim())
+   throw Error('Human adjudication incomplete or invalid');
   resolved.set(item.pairId,item.label);
  }
  const a=parseReviewerAnnotations(blind,reviewA),b=parseReviewerAnnotations(blind,reviewB);
