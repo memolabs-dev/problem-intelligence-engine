@@ -186,7 +186,7 @@ After targeted discovery, choose the new observation IDs for `PIE_LLM_OBSERVATIO
 
 The canonical home of this product is **[memolabs-dev/problem-intelligence-engine](https://github.com/memolabs-dev/problem-intelligence-engine)**.
 
-The organization contributor account is [`drop-agent-bot`](https://github.com/drop-agent-bot), with repository-level **write** permissions (not admin). The account is shared with Drop and CUESHEET; its name is retained until an organization-wide bot rename is planned. Agents develop on branches and submit PRs, with **automatic merge once both required CI checks pass** in the current solo-maintainer setup. [`CODEOWNERS`](.github/CODEOWNERS) records future maintainers, but approval is not currently mandatory. CI runs Node.js 22/24 and PostgreSQL/pgvector checks. Never store bot tokens in this repository.
+Agents act through the `memo-labs-automation` GitHub App (`memo-labs-automation[bot]`); the former `drop-agent-bot` account was retired on 2026-10-14. Agents develop on branches and submit PRs. [Mergify](.mergify.yml) merges a PR from the App or the owner **once both required CI checks pass**, in the current solo-maintainer setup; PRs touching `.github/`, `.mergify.yml`, `CODEOWNERS`, `AGENTS.md` or a root `.env*` file wait for the owner. [`CODEOWNERS`](.github/CODEOWNERS) records future maintainers, but approval is not currently mandatory. CI runs Node.js 22/24 and PostgreSQL/pgvector checks. Never store bot tokens in this repository.
 
 ## End-to-end targeted discovery cycle (experimental)
 

@@ -15,7 +15,7 @@ Do not modify unrelated repositories. Do not store secrets in git.
 
 - Work in a `feat/*`, `fix/*`, or `docs/*` branch; propose changes to `main` through pull requests.
 - The bot may open and update pull requests using its existing organization account. It must not bypass branch rules.
-- Solo-maintainer mode: Mergify (`.mergify.yml`) merges a PR from the bot or the owner once CI is green. Do not run `gh pr merge` or arm GitHub auto-merge yourself, and do not fabricate reviews or bypass CI. PRs touching `.github/`, `.mergify.yml`, `AGENTS.md` or a `migrations/` directory wait for the owner.
+- Solo-maintainer mode: Mergify (`.mergify.yml`) merges a PR from the bot or the owner once CI is green. Do not run `gh pr merge` or arm GitHub auto-merge yourself, and do not fabricate reviews or bypass CI. PRs touching `.github/`, `.mergify.yml`, `CODEOWNERS`, `AGENTS.md` or a root `.env*` file wait for the owner.
 - GitHub Actions runs Node.js 22 and 24 with PostgreSQL/pgvector. Both checks must pass before Mergify merges; protected `main` cannot be pushed to directly.
 - Keep model requests bounded and use free endpoints unless a paid provider is explicitly approved.
 - Never identify a distinct account as an independently verified person, or count two posts by one account as two users.
