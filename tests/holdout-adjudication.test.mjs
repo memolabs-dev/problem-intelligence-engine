@@ -40,3 +40,29 @@ test('rejects tampered frozen inputs and prevents omitted or fabricated adjudica
 test('reviewer pseudonym alone cannot qualify as independent human evidence',()=>{
  assert.throws(()=>prepareAdjudication(blind,A,{...B,reviewer:'reviewer-a'}),/Distinct reviewer/);
 });
+
+test('adjudication queue snapshots are detached from frozen blind evidence',()=>{
+ const before=structuredClone(blind.pairs[0].left);
+ const queue=prepareAdjudication(blind,A,B);
+ queue.items[0].left.body='A misleading replacement excerpt';
+ assert.deepEqual(blind.pairs[0].left,before);
+ assert.notDeepEqual(queue.items[0].left,before);
+});
+
+test('finalization rejects changes to any frozen source snapshot or queue structure',()=>{
+ const mutations=[
+  q=>{q.items[0].left.body='Different observed failure';},
+  q=>{q.items[0].right.url='https://example.com/other';},
+  q=>{delete q.items[0].right.title;},
+  q=>{q.items[0].left.extra='fabricated';},
+  q=>{q.items[0].unexpected='unfrozen';},
+  q=>{q.items[0].left=structuredClone(q.items[1].left);}
+ ];
+ for(const mutate of mutations){
+  const queue=prepareAdjudication(blind,A,B);
+  queue.items[0].label='same_problem';queue.items[0].reason='Same failure';
+  queue.items[1].label='uncertain';queue.items[1].reason='Insufficient detail';
+  mutate(queue);
+  assert.throws(()=>finalizeAdjudication(blind,A,B,queue),/source snapshot differs/);
+ }
+});
