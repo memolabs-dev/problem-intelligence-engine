@@ -20,4 +20,4 @@ Summarize the implementation and any schema or data migration.
 
 ## Review
 
-Solo-maintainer mode: `@drop-agent-bot` may submit PRs and enable GitHub auto-merge when the required CI checks pass. Human review is optional while branch protection requires zero approvals; the bot must not fabricate approvals or bypass required checks.
+Solo-maintainer mode: Mergify merges PRs from `memo-labs-automation[bot]` or the owner when the required CI checks pass and no sensitive path is touched. Human review is optional while branch protection requires zero approvals; nobody fabricates approvals or bypasses required checks.
