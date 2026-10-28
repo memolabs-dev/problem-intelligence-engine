@@ -35,7 +35,10 @@
     "eval:adjudicate-holdout": "node packages/agents/holdout-adjudication.mjs",
     "diagnostics:knn": "node packages/agents/knn-audit.mjs",
     "market:hypothesis": "node packages/agents/market-hypothesis.mjs",
-    "diagnostics:knn-load": "node packages/agents/knn-load-benchmark.mjs"
+    "diagnostics:knn-load": "node packages/agents/knn-load-benchmark.mjs",
+    "prepare": "sh scripts/install-git-hooks.sh",
+    "hooks:install": "sh scripts/install-git-hooks.sh",
+    "check:staged": "node scripts/check-staged-syntax.mjs"
   },
   "dependencies": {
     "pg": "^8.23.1"
